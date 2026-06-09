@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>CCAllow</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,sans-serif;background:#1a1a2e;color:#e0e0e0;padding:20px 24px}
+h1{font-size:20px;margin-bottom:4px;color:#fff}
+.subtitle{font-size:12px;color:#64748b;margin-bottom:16px}
+.section{border:1px solid #2d2d4a;border-radius:8px;padding:12px;margin-bottom:12px}
+.section h2{font-size:13px;color:#94a3b8;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px}
+.field{margin-bottom:8px}
+.field label{display:block;font-size:12px;margin-bottom:3px;color:#94a3b8}
+.field-row{display:flex;gap:6px}
+.field-row input{flex:1;padding:7px 10px;border:1px solid #333;border-radius:6px;background:#16213e;color:#fff;font-size:13px;outline:none}
+.field-row input:focus{border-color:#4f46e5}
+.field-row input[readonly]{color:#94a3b8}
+button{padding:7px 16px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;white-space:nowrap}
+.btn-primary{background:#4f46e5;color:#fff}
+.btn-primary:hover:not(:disabled){background:#4338ca}
+.btn-success{background:#16a34a;color:#fff}
+.btn-success:hover:not(:disabled){background:#15803d}
+.btn-danger{background:#dc2626;color:#fff}
+.btn-danger:hover:not(:disabled){background:#b91c1c}
+.btn-outline{background:transparent;color:#94a3b8;border:1px solid #444}
+.btn-outline:hover:not(:disabled){border-color:#4f46e5;color:#fff}
+.btn-sm{padding:4px 10px;font-size:12px}
+button:disabled{background:#374151;cursor:not-allowed;opacity:0.6}
+.status{margin-top:8px;padding:7px 10px;border-radius:6px;font-size:12px;line-height:1.4}
+.status.info{background:#1e3a5f;color:#93c5fd}
+.status.success{background:#14532d;color:#86efac}
+.status.error{background:#450a0a;color:#fca5a5}
+.status.warning{background:#451a03;color:#fdba74}
+.log{margin-top:8px;background:#0f172a;border-radius:6px;padding:8px;height:100px;overflow-y:auto;font-size:11px;font-family:monospace;white-space:pre-wrap;color:#94a3b8}
+</style>
+</head>
+<body>
+
+<h1>CCAllow</h1>
+<div class="subtitle">Claude Desktop · Auto Allow · CDP Injector  <span style="color:#4f46e5">⎯</span>  最小化到托盘</div>
+
+<!-- Claude 路径 -->
+<div class="section">
+    <h2>1. Claude Desktop 位置</h2>
+    <div class="field-row">
+        <input type="text" id="claudePath" readonly placeholder="自动检测中..." value="检测中...">
+        <button id="browseBtn" class="btn-outline btn-sm">浏览</button>
+    </div>
+</div>
+
+<!-- 启动 -->
+<div class="section">
+    <h2>2. 启动 Claude Desktop</h2>
+    <div class="field" style="margin-bottom:8px">
+        <label>调试端口</label>
+        <div class="field-row">
+            <input type="number" id="port" value="9222">
+            <button id="launchBtn" class="btn-success">启动</button>
+        </div>
+    </div>
+    <div id="launchStatus" class="status info">就绪</div>
+</div>
+
+<!-- 注入 -->
+<div class="section">
+    <h2>3. 注入脚本</h2>
+    <div class="field-row">
+        <button id="connectBtn" class="btn-primary">Connect &amp; Inject</button>
+        <button id="disconnectBtn" class="btn-danger" disabled>Disconnect</button>
+    </div>
+    <div id="status" class="status info">就绪，等待连接...</div>
+</div>
+
+<!-- 日志 -->
+<div class="section" style="border-color:transparent;padding:0">
+    <div class="log" id="log">[CCAllow] 启动完成</div>
+</div>
+
+<script>
+var claudePathInput = document.getElementById('claudePath');
+var browseBtn = document.getElementById('browseBtn');
+var portInput = document.getElementById('port');
+var launchBtn = document.getElementById('launchBtn');
+var launchStatus = document.getElementById('launchStatus');
+var connectBtn = document.getElementById('connectBtn');
+var disconnectBtn = document.getElementById('disconnectBtn');
+var statusEl = document.getElementById('status');
+var logEl = document.getElementById('log');
+
+var detectedPath = null;
+
+function setStatus(elem, msg, type) {
+    elem.textContent = msg;
+    elem.className = 'status ' + (type || 'info');
+}
+
+function log(msg) {
+    var time = new Date().toLocaleTimeString();
+    logEl.textContent += '\n[' + time + '] ' + msg;
+    logEl.scrollTop = logEl.scrollHeight;
+}
+
+function setConnectedState(connected) {
+    if (connected) {
+        connectBtn.style.display = 'none';
+        disconnectBtn.disabled = false;
+    } else {
+        connectBtn.style.display = 'inline-block';
+        connectBtn.disabled = false;
+        disconnectBtn.disabled = true;
+    }
+    window.ccallow.setConnected(connected);
+}
+
+async function doConnect() {
+    connectBtn.disabled = true;
+    setStatus(statusEl, '正在连接...', 'info');
+    log('正在连接端口 ' + portInput.value + '...');
+
+    var result = await window.ccallow.connect(parseInt(portInput.value));
+
+    if (result.success) {
+        setStatus(statusEl, '已连接！成功注入 ' + result.pages + ' 个页面', 'success');
+        log('连接成功，脚本已注入');
+        setConnectedState(true);
+    } else {
+        setStatus(statusEl, '连接失败: ' + result.error, 'error');
+        log('错误: ' + result.error);
+        connectBtn.disabled = false;
+    }
+}
+
+async function doDisconnect() {
+    disconnectBtn.disabled = true;
+    setStatus(statusEl, '断开中...', 'info');
+    await window.ccallow.disconnect();
+    setStatus(statusEl, '已断开连接', 'info');
+    log('已断开');
+    setConnectedState(false);
+}
+
+// --- 自动检测 ---
+window.ccallow.detectClaude().then(function(r) {
+    if (r.path) {
+        detectedPath = r.path;
+        claudePathInput.value = r.path;
+        setStatus(launchStatus, '已检测到 Claude Desktop', 'success');
+        log('自动检测到 Claude: ' + r.path);
+    } else {
+        claudePathInput.value = '';
+        setStatus(launchStatus, '未检测到 Claude，请手动选择', 'warning');
+        log('未自动检测到 Claude Desktop');
+    }
+});
+
+// --- 浏览选择 ---
+browseBtn.addEventListener('click', async function() {
+    var r = await window.ccallow.selectClaude();
+    if (r.path) {
+        detectedPath = r.path;
+        claudePathInput.value = r.path;
+        setStatus(launchStatus, '已选择 Claude Desktop', 'success');
+        log('手动选择: ' + r.path);
+    }
+});
+
+// --- 启动 ---
+launchBtn.addEventListener('click', async function() {
+    if (!detectedPath) {
+        setStatus(launchStatus, '请先选择 Claude Desktop 位置', 'error');
+        return;
+    }
+    launchBtn.disabled = true;
+    setStatus(launchStatus, '正在启动 Claude Desktop...', 'info');
+    log('启动 Claude (端口 ' + portInput.value + ')...');
+
+    var result = await window.ccallow.launchClaude(detectedPath, parseInt(portInput.value));
+
+    if (result.success) {
+        setStatus(launchStatus, 'Claude Desktop 已启动，准备连接...', 'success');
+        log('Claude Desktop 启动成功');
+        launchBtn.textContent = '已启动';
+    } else {
+        setStatus(launchStatus, '启动失败: ' + result.error, 'error');
+        log('启动错误: ' + result.error);
+        launchBtn.disabled = false;
+    }
+});
+
+window.ccallow.onLaunchError(function(msg) {
+    log('Claude 进程错误: ' + msg);
+    setStatus(launchStatus, '启动失败: ' + msg, 'error');
+    launchBtn.disabled = false;
+    launchBtn.textContent = '启动';
+});
+
+window.ccallow.onLaunchExit(function(code) {
+    log('Claude 进程已退出 (code: ' + code + ')');
+    setStatus(launchStatus, 'Claude 已退出 (code: ' + code + ')', 'warning');
+    launchBtn.disabled = false;
+    launchBtn.textContent = '启动';
+});
+
+window.ccallow.onLaunchLog(function(msg) {
+    log('[claude] ' + msg.trim());
+});
+
+// --- Connect & Inject ---
+connectBtn.addEventListener('click', doConnect);
+disconnectBtn.addEventListener('click', doDisconnect);
+
+// --- 托盘事件 ---
+window.ccallow.onTrayConnect(doConnect);
+window.ccallow.onTrayDisconnect(doDisconnect);
+</script>
+
+</body>
+</html>

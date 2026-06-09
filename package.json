@@ -1,0 +1,15 @@
+{
+  "name": "ccallow",
+  "version": "1.0.0",
+  "description": "Auto-allow permissions for Claude Desktop via CDP",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "puppeteer-core": "^23.0.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}
