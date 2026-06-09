@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('ccallow', {
+    getVersion: () => ipcRenderer.invoke('get-version'),
     detectClaude: () => ipcRenderer.invoke('detect-claude'),
     selectClaude: () => ipcRenderer.invoke('select-claude'),
     launchClaude: (claudePath, port) => ipcRenderer.invoke('launch-claude', claudePath, port),

@@ -98,6 +98,8 @@ function rebuildTrayMenu() {
     tray.setContextMenu(Menu.buildFromTemplate(tmpl));
 }
 
+ipcMain.handle('get-version', () => require('./package.json').version);
+
 // swap connect state from renderer
 ipcMain.handle('set-connected', (_e, v) => { isConnected = v; rebuildTrayMenu(); return true; });
 

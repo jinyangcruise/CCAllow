@@ -37,7 +37,7 @@ button:disabled{background:#374151;cursor:not-allowed;opacity:0.6}
 </head>
 <body>
 
-<h1>CCAllow</h1>
+<h1>CCAllow <span id="ver" style="font-size:12px;color:#64748b;font-weight:400"></span></h1>
 <div class="subtitle">Claude Desktop · Auto Allow · CDP Injector  <span style="color:#4f46e5">⎯</span>  最小化到托盘</div>
 
 <!-- Claude 路径 -->
@@ -89,6 +89,10 @@ var statusEl = document.getElementById('status');
 var logEl = document.getElementById('log');
 
 var detectedPath = null;
+
+window.ccallow.getVersion().then(function(v) {
+    document.getElementById('ver').textContent = 'v' + v;
+});
 
 function setStatus(elem, msg, type) {
     elem.textContent = msg;

@@ -3,13 +3,45 @@
   "version": "1.0.0",
   "description": "Auto-allow permissions for Claude Desktop via CDP",
   "main": "main.js",
+  "author": "jinyangcruise",
+  "license": "MIT",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "build": "electron-builder --win --x64 --publish never"
+  },
+  "build": {
+    "appId": "com.ccallow.app",
+    "productName": "CCAllow",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "inject.js",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerSidebar": null
+    }
   },
   "dependencies": {
     "puppeteer-core": "^23.0.0"
   },
   "devDependencies": {
-    "electron": "^33.0.0"
+    "electron": "^33.0.0",
+    "electron-builder": "^26.15.2"
   }
 }
