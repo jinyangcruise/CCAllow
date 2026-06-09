@@ -1,4 +1,4 @@
-# CCAAllow
+# CCAllow
 
 通过 CDP (Chrome DevTools Protocol) 连接到 Claude Desktop，在渲染进程注入脚本，添加"Auto Allow"勾选框并自动点击 Allow 按钮。
 

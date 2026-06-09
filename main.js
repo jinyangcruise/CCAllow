@@ -87,7 +87,7 @@ function createTray() {
 
 function rebuildTrayMenu() {
     const tmpl = [
-        { label: 'Show CCAAllow', click: () => { mainWindow.show(); mainWindow.focus(); } },
+        { label: 'Show CCAllow', click: () => { mainWindow.show(); mainWindow.focus(); } },
         { type: 'separator' },
         isConnected
             ? { label: 'Disconnect', click: () => mainWindow.webContents.send('tray-disconnect') }
