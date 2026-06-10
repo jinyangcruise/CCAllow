@@ -179,7 +179,7 @@ ipcMain.handle('launch-claude', async (_event, claudePath, port) => {
     const isStoreApp = claudePath.includes('WindowsApps');
 
     if (isStoreApp) {
-        return { success: false, error: 'Store 版 (WindowsApps) 传入 --remote-debugging-port 后启动失败 (exit code 1)，不带参数可以正常打开。请从 https://claude.ai/download 尝试直接下载 .exe 安装包（而非 Microsoft Store 版本）' };
+        return { success: false, error: 'Store 版不支持 --remote-debugging-port 参数。你可以手动启动 Claude 后点击 Connect & Inject 尝试连接。' };
     }
 
     let stderrBuf = '';

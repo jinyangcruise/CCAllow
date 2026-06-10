@@ -150,11 +150,11 @@ window.ccallow.detectClaude().then(function(r) {
         detectedPath = r.path;
         claudePathInput.value = r.path;
         if (r.isStoreApp) {
-            setStatus(launchStatus, 'Store 版 (WindowsApps) — 带 --remote-debugging-port 参数会启动失败', 'error');
-            log('[提示] 你的 Claude 安装在 WindowsApps 目录下（Store 版）');
-            log('[提示] --remote-debugging-port 参数会导致启动失败 (exit code 1)');
-            log('[提示] 如果 claude.ai/download 提供的也是 Store 版，则此工具需要改用其他方式连接');
-            launchBtn.disabled = true;
+            setStatus(launchStatus, 'Store 版 — 不支持 --remote-debugging-port，启动功能不可用', 'warning');
+            log('[提示] Claude 为 Store 版 (WindowsApps)，--remote-debugging-port 参数会导致启动失败');
+            log('[提示] 你可以手动启动 Claude，然后尝试 Connect & Inject');
+            log('[提示] 如果注入失败，可能需要寻找其他方式（如 F12 开 DevTools 后再试）');
+        } else {
         } else {
             setStatus(launchStatus, '已检测到 Claude Desktop', 'success');
         }
