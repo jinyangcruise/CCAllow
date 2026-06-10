@@ -1,7 +1,7 @@
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 
-$targets = @("Allow", "Allow once", "Allow for this time", "Allow for this")
+$targets = @("Allow once", "Allow for this time", "Allow for this")
 $running = $true
 
 $reader = [System.IO.StreamReader]::new([System.Console]::OpenStandardInput())
@@ -49,15 +49,18 @@ while ($running) {
                 Write-Output "found: >>$name<<"
                 try {
                     $invoke = [System.Windows.Automation.InvokePattern]::GetPattern($btn)
-                    if ($invoke) { $invoke.Invoke(); Write-Output "  -> clicked!" }
-                    else { Write-Output "  -> no InvokePattern" }
-                } catch {
-                    try {
-                        $legacy = [System.Windows.Automation.LegacyIAccessiblePattern]::GetPattern($btn)
-                        if ($legacy) { $legacy.DoDefaultAction(); Write-Output "  -> clicked(legacy)!" }
-                        else { Write-Output "  -> no LegacyIAccessiblePattern" }
-                    } catch { Write-Output "  -> error: $_" }
-                }
+                    if ($invoke) { $invoke.Invoke(); Write-Output "clicked!"; continue }
+                } catch { }
+                # Fallback: Win32 SendMessage BM_CLICK
+                try {
+                    $hwnd = [IntPtr] $btn.Current.NativeWindowHandle
+                    if ($hwnd -eq 0) { Write-Output "no hwnd"; continue }
+                    Add-Type -Name W32 -Member @"
+[DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+"@ -ErrorAction Stop
+                    [W32]::SendMessage($hwnd, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+                    Write-Output "clicked (SendMessage)!"
+                } catch { Write-Output "error: $_" }
             }
         } catch { Write-Output "  error: $_" }
     }
