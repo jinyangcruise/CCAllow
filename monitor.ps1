@@ -20,7 +20,7 @@ public class Win32 {
 }
 "@
 
-$targets = @("Allow", "Allow once", "Allow for this time", "Allow for this")
+$targets = @("Allow", "Allow once", "Allow Once", "Allow for this time", "Allow for this")
 $running = $true
 $debugCounter = 0
 
