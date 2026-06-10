@@ -13,30 +13,7 @@ public class Win32 {
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-    [DllImport("user32.dll")] public static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwp);
-    [DllImport("user32.dll")] public static extern bool SetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwp);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-}
-
-[StructLayout(LayoutKind.Sequential)]
-public struct POINT {
-    public int X; public int Y;
-}
-
-[StructLayout(LayoutKind.Sequential)]
-public struct RECT {
-    public int Left; public int Top; public int Right; public int Bottom;
-}
-
-[StructLayout(LayoutKind.Sequential)]
-public struct WINDOWPLACEMENT {
-    public int length;
-    public int flags;
-    public int showCmd;
-    public POINT ptMinPosition;
-    public POINT ptMaxPosition;
-    public RECT rcNormalPosition;
-    public RECT rcDevice;
 }
 "@
 
@@ -134,31 +111,19 @@ while ($running) {
 
     # Claude IS minimized
     if ($minimizedPolling) {
-        $wp = New-Object WINDOWPLACEMENT
-        $wp.length = [System.Runtime.InteropServices.Marshal]::SizeOf($wp)
-        [Win32]::GetWindowPlacement($hwnd, [ref]$wp) | Out-Null
-        $savedNormal = $wp.rcNormalPosition
-        # Restore off-screen in a single SetWindowPlacement call
-        $wp.showCmd = 9  # SW_RESTORE
-        $wp.rcNormalPosition = New-Object RECT
-        $wp.rcNormalPosition.Left = 4000; $wp.rcNormalPosition.Top = 3000
-        $wp.rcNormalPosition.Right = 4100; $wp.rcNormalPosition.Bottom = 3100
-        [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
+        # Move minimized window off-screen then restore
+        [Win32]::SetWindowPos($hwnd, [IntPtr]::Zero, 4000, 3000, 0, 0, 0x0001 -bor 0x0004 -bor 0x0010) | Out-Null
+        [Win32]::ShowWindow($hwnd, 9) | Out-Null  # SW_RESTORE
         Start-Sleep -Milliseconds 300
         Write-Output "  checking..."
         try {
             $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
             if ($btn) {
-                # Restore original position
-                $wp.rcNormalPosition = $savedNormal
-                [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
                 ClickButton $btn $p.Id
                 continue
             }
         } catch { }
-        $wp.showCmd = 6  # SW_MINIMIZE
-        $wp.rcNormalPosition = $savedNormal
-        [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
+        [Win32]::ShowWindow($hwnd, 6) | Out-Null  # SW_MINIMIZE
         Start-Sleep -Milliseconds $peekInterval
     } else {
         Start-Sleep -Milliseconds 1000
