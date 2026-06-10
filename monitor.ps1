@@ -114,7 +114,7 @@ while ($running) {
 
     # Claude IS minimized
     if ($minimizedPolling) {
-        [Win32]::ShowWindow($hwnd, 9) | Out-Null  # SW_RESTORE
+        [Win32]::ShowWindow($hwnd, 4) | Out-Null  # SW_SHOWNOACTIVATE (don't steal focus)
         Start-Sleep -Milliseconds 300
         Write-Output "  checking..."
         try {
