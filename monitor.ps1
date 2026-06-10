@@ -34,31 +34,29 @@ while ($running) {
                 [System.Windows.Automation.ControlType]::Button)
 
             $buttons = $root.FindAll([System.Windows.Automation.TreeScope]::Subtree, $ctrlCond)
-            Write-Output "  buttons found: $($buttons.Count)"
 
             for ($i = 0; $i -lt $buttons.Count; $i++) {
                 $btn = $buttons[$i]
                 $name = $btn.Current.Name.Trim()
                 $enabled = $btn.Current.IsEnabled
-                Write-Output "  btn[$i]='$name' enabled=$enabled"
 
                 if (-not $enabled) { continue }
+                $matched = $false
                 foreach ($t in $targets) {
-                    if ($name -eq $t) {
-                        Write-Output "  -> match: $t"
-                        try {
-                            $invoke = [System.Windows.Automation.InvokePattern]::GetPattern($btn)
-                            if ($invoke) { $invoke.Invoke(); Write-Output "  -> clicked!"
-                            } else { Write-Output "  -> no InvokePattern" }
-                        } catch {
-                            try {
-                                $legacy = [System.Windows.Automation.LegacyIAccessiblePattern]::GetPattern($btn)
-                                if ($legacy) { $legacy.DoDefaultAction(); Write-Output "  -> clicked(legacy)!" }
-                                else { Write-Output "  -> no LegacyIAccessiblePattern" }
-                            } catch { Write-Output "  -> error: $_" }
-                        }
-                        break
-                    }
+                    if ($name.StartsWith($t)) { $matched = $t; break }
+                }
+                if (-not $matched) { continue }
+                Write-Output "found: >>$name<<"
+                try {
+                    $invoke = [System.Windows.Automation.InvokePattern]::GetPattern($btn)
+                    if ($invoke) { $invoke.Invoke(); Write-Output "  -> clicked!" }
+                    else { Write-Output "  -> no InvokePattern" }
+                } catch {
+                    try {
+                        $legacy = [System.Windows.Automation.LegacyIAccessiblePattern]::GetPattern($btn)
+                        if ($legacy) { $legacy.DoDefaultAction(); Write-Output "  -> clicked(legacy)!" }
+                        else { Write-Output "  -> no LegacyIAccessiblePattern" }
+                    } catch { Write-Output "  -> error: $_" }
                 }
             }
         } catch { Write-Output "  error: $_" }
