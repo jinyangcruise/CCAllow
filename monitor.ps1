@@ -16,7 +16,7 @@ public class Win32 {
 }
 "@
 
-$targets = @("Allow", "Allow once", "Allow Once", "Allow for this time", "Allow for this")
+$targets = @("Allow once", "Allow Once", "Allow for this time", "Allow for this")
 $running = $true
 $peekInterval = 2500
 $minimizedPolling = $false
