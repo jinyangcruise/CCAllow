@@ -47,19 +47,26 @@ while ($running) {
                 }
                 if (-not $matched) { continue }
                 Write-Output "found: >>$name<<"
+                # Try Invoke pattern
                 try {
                     $invoke = [System.Windows.Automation.InvokePattern]::GetPattern($btn)
                     if ($invoke) { $invoke.Invoke(); Write-Output "clicked!"; continue }
                 } catch { }
-                # Fallback: Win32 SendMessage BM_CLICK
+                # Fallback: simulate mouse click at button center
                 try {
-                    $hwnd = [IntPtr] $btn.Current.NativeWindowHandle
-                    if ($hwnd -eq 0) { Write-Output "no hwnd"; continue }
-                    Add-Type -Name W32 -Member @"
-[DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+                    $rect = $btn.Current.BoundingRectangle
+                    if (-not $rect -or ($rect.Width -eq 0 -and $rect.Height -eq 0)) { Write-Output "no rect"; continue }
+                    Add-Type -Name M -Member @"
+[DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+[DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
 "@ -ErrorAction Stop
-                    [W32]::SendMessage($hwnd, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
-                    Write-Output "clicked (SendMessage)!"
+                    $x = [int]($rect.Left + $rect.Width / 2)
+                    $y = [int]($rect.Top + $rect.Height / 2)
+                    [M]::SetCursorPos($x, $y) | Out-Null
+                    Start-Sleep -Milliseconds 50
+                    [M]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)  # down
+                    [M]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)  # up
+                    Write-Output "clicked (mouse)!"
                 } catch { Write-Output "error: $_" }
             }
         } catch { Write-Output "  error: $_" }
