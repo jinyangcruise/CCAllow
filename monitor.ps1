@@ -144,15 +144,27 @@ while ($running) {
         $pw = $savedNormal.Right - $savedNormal.Left
         $ph = $savedNormal.Bottom - $savedNormal.Top
         Write-Output "  savedPos=($($savedNormal.Left),$($savedNormal.Top)) screen=($sw,$sh) win=($pw,$ph)"
-        # Restore at original size/position, check Allow via InvokePattern (no focus steal)
-        [Win32]::ShowWindow($hwnd, 4) | Out-Null  # SW_SHOWNOACTIVATE
+        # Move to bottom-right (only ~10px visible), restore at that position
+        $r = $wp.rcNormalPosition
+        $offX = [Math]::Max(0, $sw - 10); $offY = [Math]::Max(0, $sh - 10 - 80)  # ~10px from edge, -80 for taskbar
+        $r.Left = $offX; $r.Top = $offY; $r.Right = $offX + $pw; $r.Bottom = $offY + $ph
+        $wp.rcNormalPosition = $r
+        $wp.showCmd = 4  # SW_SHOWNOACTIVATE
+        [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
         Start-Sleep -Milliseconds 600
         Write-Output "  checking..."
         try {
             $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
-            if ($btn) { ClickButton $btn $p.Id; continue }
+            if ($btn) {
+                $wp.rcNormalPosition = $savedNormal
+                [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
+                ClickButton $btn $p.Id
+                continue
+            }
         } catch { Write-Output "  check error: $_" }
-        [Win32]::ShowWindow($hwnd, 6) | Out-Null  # SW_MINIMIZE
+        $wp.rcNormalPosition = $savedNormal
+        $wp.showCmd = 6  # SW_MINIMIZE
+        [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
         Start-Sleep -Milliseconds $peekInterval
     } else {
         Start-Sleep -Milliseconds 1000
