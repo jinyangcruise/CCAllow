@@ -28,10 +28,10 @@ $readTask = $reader.ReadLineAsync()
 function HandleCommand($line) {
     if (-not $line) { return }
     Write-Output "  cmd: $line"
-    if ($line -eq "exit") { $running = $false; return }
-    if ($line -match '^interval:(\d+)$') { $peekInterval = [int]$Matches[1]; return }
-    if ($line -eq "polling:on") { $minimizedPolling = $true; return }
-    if ($line -eq "polling:off") { $minimizedPolling = $false; return }
+    if ($line -eq "exit") { $script:running = $false; return }
+    if ($line -match '^interval:(\d+)$') { $script:peekInterval = [int]$Matches[1]; return }
+    if ($line -eq "polling:on") { $script:minimizedPolling = $true; return }
+    if ($line -eq "polling:off") { $script:minimizedPolling = $false; return }
 }
 
 function FindAllowButton($root) {
