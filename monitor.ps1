@@ -20,6 +20,7 @@ $targets = @("Allow", "Allow once", "Allow Once", "Allow for this time", "Allow 
 $running = $true
 $peekInterval = 2500
 $minimizedPolling = $false
+$loopCount = 0
 
 $reader = [System.IO.StreamReader]::new([System.Console]::OpenStandardInput())
 $readTask = $reader.ReadLineAsync()
@@ -74,6 +75,8 @@ function ClickButton($btn, $procId) {
 }
 
 while ($running) {
+    $loopCount++
+    if ($loopCount % 10 -eq 0) { Write-Output "alive (loop $loopCount, polling=$minimizedPolling, interval=$peekInterval)" }
     if ($readTask.IsCompleted) {
         $line = $readTask.Result
         if ($null -eq $line) { $running = $false; break }
