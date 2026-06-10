@@ -138,13 +138,12 @@ while ($running) {
         $wp.length = [System.Runtime.InteropServices.Marshal]::SizeOf($wp)
         [Win32]::GetWindowPlacement($hwnd, [ref]$wp) | Out-Null
         $savedNormal = $wp.rcNormalPosition
-        # Move restored position off-screen
+        # Restore off-screen in a single SetWindowPlacement call
+        $wp.showCmd = 9  # SW_RESTORE
         $wp.rcNormalPosition = New-Object RECT
         $wp.rcNormalPosition.Left = -3000; $wp.rcNormalPosition.Top = -3000
         $wp.rcNormalPosition.Right = -2000; $wp.rcNormalPosition.Bottom = -1000
         [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
-        # Restore off-screen
-        [Win32]::ShowWindow($hwnd, 9) | Out-Null
         Start-Sleep -Milliseconds 300
         Write-Output "  checking..."
         try {
@@ -157,7 +156,6 @@ while ($running) {
                 continue
             }
         } catch { }
-        # No Allow found: minimize, restore original position
         $wp.showCmd = 6  # SW_MINIMIZE
         $wp.rcNormalPosition = $savedNormal
         [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
