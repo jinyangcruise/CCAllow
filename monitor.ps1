@@ -47,27 +47,30 @@ while ($running) {
                 }
                 if (-not $matched) { continue }
                 Write-Output "found: >>$name<<"
-                # Try Invoke pattern
+                # Try Invoke pattern first (no interference)
                 try {
                     $invoke = [System.Windows.Automation.InvokePattern]::GetPattern($btn)
                     if ($invoke) { $invoke.Invoke(); Write-Output "clicked!"; continue }
                 } catch { }
-                # Fallback: simulate mouse click at button center
+                # Send Ctrl+Enter keyboard shortcut to Claude window
                 try {
-                    $rect = $btn.Current.BoundingRectangle
-                    if (-not $rect -or ($rect.Width -eq 0 -and $rect.Height -eq 0)) { Write-Output "no rect"; continue }
-                    Add-Type -Name M -Member @"
-[DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
-[DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
+                    $hwnd = $proc.MainWindowHandle
+                    Add-Type -Name K -Member @"
+[DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
 "@ -ErrorAction Stop
-                    $x = [int]($rect.Left + $rect.Width / 2)
-                    $y = [int]($rect.Top + $rect.Height / 2)
-                    [M]::SetCursorPos($x, $y) | Out-Null
+                    [K]::SetForegroundWindow($hwnd) | Out-Null
                     Start-Sleep -Milliseconds 50
-                    [M]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)  # down
-                    [M]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)  # up
-                    Write-Output "clicked (mouse)!"
-                } catch { Write-Output "error: $_" }
+                    $VK_CONTROL = 0x11; $VK_RETURN = 0x0D
+                    $WM_KEYDOWN = 0x100; $WM_KEYUP = 0x101
+                    [K]::PostMessage($hwnd, $WM_KEYDOWN, [IntPtr]$VK_CONTROL, [IntPtr]::Zero) | Out-Null
+                    Start-Sleep -Milliseconds 20
+                    [K]::PostMessage($hwnd, $WM_KEYDOWN, [IntPtr]$VK_RETURN, [IntPtr]::Zero) | Out-Null
+                    Start-Sleep -Milliseconds 20
+                    [K]::PostMessage($hwnd, $WM_KEYUP, [IntPtr]$VK_RETURN, [IntPtr]::Zero) | Out-Null
+                    [K]::PostMessage($hwnd, $WM_KEYUP, [IntPtr]$VK_CONTROL, [IntPtr]::Zero) | Out-Null
+                    Write-Output "clicked (Ctrl+Enter)!"
+                } catch { Write-Output "key error: $_" }
             }
         } catch { Write-Output "  error: $_" }
     }
