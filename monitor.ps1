@@ -141,8 +141,8 @@ while ($running) {
         # Restore off-screen in a single SetWindowPlacement call
         $wp.showCmd = 9  # SW_RESTORE
         $wp.rcNormalPosition = New-Object RECT
-        $wp.rcNormalPosition.Left = -3000; $wp.rcNormalPosition.Top = -3000
-        $wp.rcNormalPosition.Right = -2000; $wp.rcNormalPosition.Bottom = -1000
+        $wp.rcNormalPosition.Left = 4000; $wp.rcNormalPosition.Top = 3000
+        $wp.rcNormalPosition.Right = 4100; $wp.rcNormalPosition.Bottom = 3100
         [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
         Start-Sleep -Milliseconds 300
         Write-Output "  checking..."
