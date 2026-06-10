@@ -36,7 +36,6 @@ while ($running) {
     }
 
     foreach ($proc in $procs) {
-        Write-Output "proc: $($proc.ProcessName) hwnd=$($proc.MainWindowHandle)"
         try {
             $root = [System.Windows.Automation.AutomationElement]::FromHandle($proc.MainWindowHandle)
             if (-not $root) { Write-Output "no UIA root"; continue }
