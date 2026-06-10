@@ -118,7 +118,7 @@ function EnableAnim($hwnd) {
 
 while ($running) {
     $loopCount++
-    if ($loopCount % 10 -eq 0) { Write-Output "alive (loop $loopCount, polling=$minimizedPolling, interval=$peekInterval)" }
+    if ($loopCount % 10 -eq 0) { } # Write-Output "alive (loop $loopCount, polling=$minimizedPolling, interval=$peekInterval)"
     if ($readTask.IsCompleted) {
         $line = $readTask.Result
         if ($null -eq $line) { $running = $false; break }
@@ -160,7 +160,7 @@ while ($running) {
         $sw = [Win32]::GetSystemMetrics(0); $sh = [Win32]::GetSystemMetrics(1)
         $pw = $wp.rcNormalPosition.Right - $wp.rcNormalPosition.Left
         $ph = $wp.rcNormalPosition.Bottom - $wp.rcNormalPosition.Top
-        Write-Output "  savedPos=($($wp.rcNormalPosition.Left),$($wp.rcNormalPosition.Top)) screen=($sw,$sh) win=($pw,$ph)"
+        # Write-Output "  savedPos=($($wp.rcNormalPosition.Left),$($wp.rcNormalPosition.Top)) screen=($sw,$sh) win=($pw,$ph)"
         # Set position while hidden, wait, then show (no flash)
         $offX = [Math]::Max(0, $sw - 10); $offY = [Math]::Max(0, $sh - 10 - 80)
         $r = $wp.rcNormalPosition
@@ -178,7 +178,7 @@ while ($running) {
         Write-Output "  actual=$($wp2.rcNormalPosition.Left),$($wp2.rcNormalPosition.Top)"
         [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
         Start-Sleep -Milliseconds 600
-        Write-Output "  checking..."
+        # Write-Output "  checking..."
         try {
             $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
             if ($btn) {
