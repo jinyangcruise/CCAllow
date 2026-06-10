@@ -27,6 +27,7 @@ $readTask = $reader.ReadLineAsync()
 
 function HandleCommand($line) {
     if (-not $line) { return }
+    Write-Output "  cmd: $line"
     if ($line -eq "exit") { $running = $false; return }
     if ($line -match '^interval:(\d+)$') { $peekInterval = [int]$Matches[1]; return }
     if ($line -eq "polling:on") { $minimizedPolling = $true; return }
