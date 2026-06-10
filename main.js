@@ -11,6 +11,30 @@ let mainWindow;
 let tray;
 let monitorProcess = null;
 let monitorEnabled = false;
+let configPath;
+
+function getConfig() {
+    try {
+        if (fs.existsSync(configPath)) return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    } catch {}
+    return {};
+}
+
+function saveConfig(cfg) {
+    try {
+        const dir = path.dirname(configPath);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        const cur = getConfig();
+        Object.assign(cur, cfg);
+        fs.writeFileSync(configPath, JSON.stringify(cur, null, 2));
+    } catch {}
+}
+
+function applyAutoStart() {
+    const cfg = getConfig();
+    const enabled = cfg.autoStart !== false;
+    app.setLoginItemSettings({ openAtLogin: enabled });
+}
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -87,7 +111,23 @@ ipcMain.handle('toggle-monitor', () => {
 
 ipcMain.handle('get-status', () => ({ enabled: monitorEnabled }));
 
+ipcMain.handle('get-auto-start', () => {
+    const cfg = getConfig();
+    return { enabled: cfg.autoStart !== false };
+});
+
+ipcMain.handle('set-auto-start', (_e, enabled) => {
+    saveConfig({ autoStart: enabled });
+    app.setLoginItemSettings({ openAtLogin: enabled });
+    return { enabled };
+});
+
 app.isQuitting = false;
 app.on('before-quit', () => { app.isQuitting = true; stopMonitor(); });
-app.whenReady().then(() => { createWindow(); createTray(); });
+app.whenReady().then(() => {
+    configPath = path.join(app.getPath('userData'), 'config.json');
+    applyAutoStart();
+    createWindow();
+    createTray();
+});
 app.on('window-all-closed', () => {});
