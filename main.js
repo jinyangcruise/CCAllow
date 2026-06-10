@@ -115,6 +115,7 @@ function detectClaudePath() {
             path.join(localAppData, 'Claude', 'Claude.exe'),
             path.join(progFiles, 'Claude', 'Claude.exe'),
             path.join(progFilesX86, 'Claude', 'Claude.exe'),
+            path.join(localAppData, 'Microsoft', 'WindowsApps', 'claude.exe'),
             path.join(localAppData, 'Programs', 'claude', 'Claude.exe'),
             path.join(localAppData, 'claude', 'Claude.exe'),
         ];
@@ -163,14 +164,53 @@ ipcMain.handle('select-claude', async () => {
 
 ipcMain.handle('launch-claude', async (_event, claudePath, port) => {
     if (claudeProcess) return { success: false, error: 'Claude is already running from this launcher' };
+
+    const exeDir = path.dirname(claudePath);
+    const exeName = path.basename(claudePath, '.exe');
+    const isWindowsApp = process.platform === 'win32' && claudePath.includes('WindowsApps');
+    let stderrBuf = '', stdoutBuf = '';
+
+    function onStdout(d) { stdoutBuf += d.toString(); if (mainWindow) mainWindow.webContents.send('launch-log', d.toString().trim()); }
+    function onStderr(d) { stderrBuf += d.toString(); if (mainWindow) mainWindow.webContents.send('launch-log', d.toString().trim()); }
+
     try {
-        claudeProcess = spawn(claudePath, [`--remote-debugging-port=${port}`], { detached: false, stdio: ['ignore', 'pipe', 'pipe'] });
-        claudeProcess.on('error', (err) => { claudeProcess = null; if (mainWindow) mainWindow.webContents.send('launch-error', err.message); });
-        claudeProcess.on('exit', (code) => { claudeProcess = null; if (mainWindow) mainWindow.webContents.send('launch-exit', code); });
-        claudeProcess.stdout.on('data', (d) => { if (mainWindow) mainWindow.webContents.send('launch-log', d.toString()); });
-        claudeProcess.stderr.on('data', (d) => { if (mainWindow) mainWindow.webContents.send('launch-log', d.toString()); });
+        let proc;
+
+        if (isWindowsApp) {
+            // WindowsApps: use Start-Process via PowerShell
+            const psCmd = `Start-Process -FilePath '${claudePath.replace(/'/g, "''")}' -ArgumentList '--remote-debugging-port=${port}' -WindowStyle Normal`;
+            const logMsg = `powershell -NoProfile -Command "${psCmd}"`;
+            proc = spawn('powershell', ['-NoProfile', '-Command', psCmd], {
+                cwd: exeDir, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
+            });
+            proc.on('error', (err) => { if (mainWindow) mainWindow.webContents.send('launch-error', err.message); });
+            proc.on('exit', () => { claudeProcess = null; });
+            claudeProcess = proc;
+            return { success: true, note: 'Launched via PowerShell Start-Process' };
+        }
+
+        // Regular install: spawn directly
+        proc = spawn(claudePath, [`--remote-debugging-port=${port}`], {
+            cwd: exeDir, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        proc.on('error', (err) => { claudeProcess = null; if (mainWindow) mainWindow.webContents.send('launch-error', err.message); });
+        proc.stdout.on('data', onStdout);
+        proc.stderr.on('data', onStderr);
+        proc.on('exit', (code) => {
+            claudeProcess = null;
+            if (code !== 0) {
+                let detail = stderrBuf || stdoutBuf || '(no output)';
+                if (mainWindow) mainWindow.webContents.send('launch-log', `--- exit:${code} ---\n${detail.trim()}`);
+            }
+            if (mainWindow) mainWindow.webContents.send('launch-exit', code);
+        });
+        claudeProcess = proc;
         return { success: true };
-    } catch (err) { claudeProcess = null; return { success: false, error: err.message }; }
+
+    } catch (err) {
+        claudeProcess = null;
+        return { success: false, error: err.message };
+    }
 });
 
 // ── CDP connect / inject ──

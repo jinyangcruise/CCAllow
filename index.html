@@ -201,7 +201,11 @@ window.ccallow.onLaunchError(function(msg) {
 
 window.ccallow.onLaunchExit(function(code) {
     log('Claude 进程已退出 (code: ' + code + ')');
-    setStatus(launchStatus, 'Claude 已退出 (code: ' + code + ')', 'warning');
+    if (code !== 0) {
+        setStatus(launchStatus, '启动失败 (code: ' + code + ')。尝试手动启动 Claude Desktop，或用管理员身份运行 CCAAllow', 'error');
+    } else {
+        setStatus(launchStatus, 'Claude 已退出', 'warning');
+    }
     launchBtn.disabled = false;
     launchBtn.textContent = '启动';
 });
