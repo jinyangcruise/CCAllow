@@ -127,6 +127,9 @@ app.on('before-quit', () => { app.isQuitting = true; stopMonitor(); });
 app.whenReady().then(() => {
     configPath = path.join(app.getPath('userData'), 'config.json');
     applyAutoStart();
+    // Start monitor before creating window so UI gets correct status
+    const cfg = getConfig();
+    if (cfg.autoStart !== false) startMonitor();
     createWindow();
     createTray();
 });
