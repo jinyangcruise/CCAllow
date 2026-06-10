@@ -176,36 +176,45 @@ ipcMain.handle('launch-claude', async (_event, claudePath, port) => {
     let attempts = [claudePath];
 
     if (isStoreApp) {
-        // For Store apps, the internal exe can't be spawned directly.
-        // Try the execution alias (reparse point that triggers Store activation)
+        // Store apps can't be spawned directly (CreateProcess fails).
+        // Must use ShellExecute. Try via PowerShell's Shell.Application COM.
+        const quoted = claudePath.replace(/'/g, "''");
+        const psCmd = `(New-Object -ComObject Shell.Application).ShellExecute('${quoted}', '--remote-debugging-port=${port}', '', 'open', 1)`;
+        if (mainWindow) mainWindow.webContents.send('launch-log', `[ShellExecute] Launching via PowerShell COM...`);
+
+        try {
+            const proc = spawn('powershell', ['-NoProfile', '-Command', psCmd], {
+                detached: true, stdio: 'ignore',
+            });
+            proc.unref();
+            claudeProcess = proc;
+            // Give it a moment
+            await new Promise(r => setTimeout(r, 1000));
+            // Check if any claude process appeared
+            const check = spawn('tasklist', ['/FI', 'IMAGENAME eq claude.exe', '/NH'], { stdio: ['ignore', 'pipe', 'pipe'] });
+            let out = '';
+            check.stdout.on('data', d => out += d.toString());
+            await new Promise(r => check.on('close', r));
+            if (out.includes('claude.exe')) {
+                if (mainWindow) mainWindow.webContents.send('launch-log', `Launched via ShellExecute`);
+                return { success: true };
+            }
+        } catch (err) {
+            if (mainWindow) mainWindow.webContents.send('launch-log', `[ShellExecute] ${err.message}`);
+        }
+
+        // Fallback: try execution alias
         const appsDir = path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WindowsApps');
         for (const name of ['claude.exe', 'Claude.exe']) {
             const fp = path.join(appsDir, name);
-            if (fs.existsSync(fp)) { attempts.push(fp); break; }
-        }
-        // If alias not found, try running `where claude` to locate it
-        if (attempts.length === 1) {
-            if (mainWindow) mainWindow.webContents.send('launch-log', 'Looking for Claude execution alias...');
-            const whereOut = await new Promise(resolve => {
-                const proc = spawn('where', ['claude'], { stdio: ['ignore', 'pipe', 'pipe'] });
-                let out = '';
-                proc.stdout.on('data', d => out += d.toString());
-                proc.on('close', () => resolve(out.trim()));
-            });
-            const lines = whereOut.split(/\r?\n/).filter(Boolean);
-            for (const line of lines) {
-                const fp = line.trim();
-                if (fp && fp !== claudePath && fs.existsSync(fp)) {
-                    attempts.push(fp);
-                    if (mainWindow) mainWindow.webContents.send('launch-log', `Found alias: ${fp}`);
-                    break;
-                }
+            if (fs.existsSync(fp) && fp !== claudePath) {
+                attempts.push(fp);
+                break;
             }
         }
+
         if (attempts.length === 1) {
-            if (mainWindow) mainWindow.webContents.send('launch-log',
-                'Store apps can\'t be launched directly. Install non-Store version from https://claude.ai/download or run: ' +
-                `claude --remote-debugging-port=${port}`);
+            return { success: false, error: 'Store app cannot be spawned directly. Try the non-Store version from claude.ai/download' };
         }
     }
 
