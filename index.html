@@ -91,18 +91,16 @@ toggle.addEventListener('change', async function() {
     }
 });
 
-window.ccallow.onTrayToggle(function() {
-    setTimeout(async function() {
-        var state = await window.ccallow.getStatus();
-        toggle.checked = state.enabled;
-        if (state.enabled) {
-            setStatus('监控中...', 'active');
-            log('监控已启动');
-        } else {
-            setStatus('已停止', 'idle');
-            log('监控已停止');
-        }
-    }, 100);
+window.ccallow.onTrayToggle(async function() {
+    var result = await window.ccallow.toggleMonitor();
+    toggle.checked = result.enabled;
+    if (result.enabled) {
+        setStatus('监控中... 检测到 Allow 按钮将自动点击', 'active');
+        log('监控已启动');
+    } else {
+        setStatus('已停止', 'idle');
+        log('监控已停止');
+    }
 });
 
 document.getElementById('copyLog').addEventListener('click', function() {
