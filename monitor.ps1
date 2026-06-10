@@ -161,11 +161,14 @@ while ($running) {
         $pw = $wp.rcNormalPosition.Right - $wp.rcNormalPosition.Left
         $ph = $wp.rcNormalPosition.Bottom - $wp.rcNormalPosition.Top
         Write-Output "  savedPos=($($wp.rcNormalPosition.Left),$($wp.rcNormalPosition.Top)) screen=($sw,$sh) win=($pw,$ph)"
-        # Show at original position, then immediately move+resize to bottom-right
-        [Win32]::ShowWindow($hwnd, 4) | Out-Null  # SW_SHOWNOACTIVATE
+        # One-shot: set position+size to 100x100 at bottom-right, then show
         $offX = [Math]::Max(0, $sw - 100); $offY = [Math]::Max(0, $sh - 100 - 80)
-        [Win32]::SetWindowPos($hwnd, [IntPtr]::Zero, $offX, $offY, 100, 100, 0x0004 -bor 0x0010) | Out-Null
-        Write-Output "  moved to ($offX, $offY) 100x100"
+        $r = $wp.rcNormalPosition
+        $r.Left = $offX; $r.Top = $offY; $r.Right = $offX + 100; $r.Bottom = $offY + 100
+        $wp.rcNormalPosition = $r
+        $wp.showCmd = 4  # SW_SHOWNOACTIVATE
+        [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
+        Write-Output "  pos=($offX,$offY) 100x100"
         [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
         Start-Sleep -Milliseconds 600
         Write-Output "  checking..."
