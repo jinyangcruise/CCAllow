@@ -12,20 +12,18 @@ public class Win32 {
     [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
-    [DllImport("user32.dll")] public static extern int GetClassName(IntPtr hWnd, StringBuilder text, int count);
-    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-    [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr hWnd, EnumWindowsProc lpEnumFunc, IntPtr lParam);
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 }
 "@
 
 $targets = @("Allow", "Allow once", "Allow Once", "Allow for this time", "Allow for this")
 $running = $true
-$debugCounter = 0
 
 $reader = [System.IO.StreamReader]::new([System.Console]::OpenStandardInput())
 $readTask = $reader.ReadLineAsync()
+
+# Track last seen Claude window title to detect changes
+$lastTitle = ""
 
 function FindAllowButton($root) {
     if (-not $root) { return $null }
@@ -50,12 +48,10 @@ function FindAllowButton($root) {
 function ClickButton($btn, $procId) {
     $name = $btn.Current.Name.Trim()
     Write-Output "found: >>$name<<"
-    # Try InvokePattern
     try {
         $invoke = [System.Windows.Automation.InvokePattern]::GetPattern($btn)
         if ($invoke) { $invoke.Invoke(); Write-Output "clicked!"; return }
     } catch { }
-    # Activate + SendKeys
     try {
         $prevHwnd = [IntPtr]::Zero
         try { $prevHwnd = [Win32]::GetForegroundWindow() } catch { }
@@ -83,74 +79,47 @@ while ($running) {
 
     if (-not $claudeProcs) { Start-Sleep -Milliseconds 500; continue }
 
-    $claudePids = @{}
-    foreach ($p in $claudeProcs) { $claudePids[$p.Id] = $p.MainWindowHandle }
+    $p = $claudeProcs[0]
+    $hwnd = $p.MainWindowHandle
+    $isMin = [Win32]::IsIconic($hwnd)
 
-    # 1) Check main Claude windows via UIA (works when not minimized)
-    foreach ($p in $claudeProcs) {
-        if ([Win32]::IsIconic($p.MainWindowHandle)) { continue }
+    # Check Claude window when NOT minimized
+    if (-not $isMin) {
         try {
-            $root = [System.Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
-            $btn = FindAllowButton $root
+            $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
             if ($btn) { ClickButton $btn $p.Id }
+        } catch { }
+        Start-Sleep -Milliseconds 400
+        continue
+    }
+
+    # Claude IS minimized: monitor window title for changes
+    $title = New-Object System.Text.StringBuilder 256
+    [Win32]::GetWindowText($hwnd, $title, 256) | Out-Null
+    $currentTitle = $title.ToString().Trim()
+
+    if ($currentTitle -ne $lastTitle) {
+        Write-Output "title changed: '$lastTitle' -> '$currentTitle'"
+        $lastTitle = $currentTitle
+    }
+
+    # If title suggests a permission dialog (keywords), restore and check
+    if ($currentTitle -match '(?i)allow|permission|confirm|approve') {
+        Write-Output "title suggests permission dialog, restoring..."
+        [Win32]::ShowWindow($hwnd, 9) | Out-Null  # SW_RESTORE
+        # Wait for Chromium to restore its UIA tree
+        Start-Sleep -Milliseconds 800
+        try {
+            $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
+            if ($btn) {
+                ClickButton $btn $p.Id
+                # Don't minimize back - user needs to see the result
+            } else {
+                Write-Output "  no Allow button found, minimizing back"
+                [Win32]::ShowWindow($hwnd, 6) | Out-Null  # SW_MINIMIZE
+            }
         } catch { }
     }
 
-    # 2) Search entire UIA tree for Allow buttons (catches Toast notifications, dialogs)
-    try {
-        $desktop = [System.Windows.Automation.AutomationElement]::RootElement
-        $cond = New-Object System.Windows.Automation.PropertyCondition(
-            [System.Windows.Automation.AutomationElementIdentifiers]::ControlTypeProperty,
-            [System.Windows.Automation.ControlType]::Button)
-        $allBtns = $desktop.FindAll([System.Windows.Automation.TreeScope]::Subtree, $cond)
-        # Debug: dump all process window titles to identify the notification
-        $titles = Get-Process | Where-Object { $_.MainWindowTitle -ne '' } |
-            Select-Object @{N='p';E={$_.ProcessName}}, @{N='t';E={$_.MainWindowTitle}}
-        Write-Output "  process windows:"
-        foreach ($item in $titles) { Write-Output "    $($item.p) : $($item.t)" }
-        if ($allBtns) {
-        if ($allBtns) {
-            for ($i = 0; $i -lt $allBtns.Count; $i++) {
-                $btn = $allBtns[$i]
-                $name = $btn.Current.Name.Trim()
-                if (-not $btn.Current.IsEnabled) { continue }
-                $matched = $false
-                foreach ($t in $targets) {
-                    if ($name.StartsWith($t)) { $matched = $t; break }
-                }
-                if (-not $matched) { continue }
-                # Found Allow button - get the owning process PID
-                $ownerPid = 0
-                try {
-                    $hwnd2 = $btn.Current.NativeWindowHandle
-                    if ($hwnd2 -ne 0) {
-                        [Win32]::GetWindowThreadProcessId($hwnd2, [ref]$ownerPid) | Out-Null
-                    }
-                } catch { }
-                if ($ownerPid -eq 0) { $ownerPid = $claudeProcs[0].Id }
-                ClickButton $btn $ownerPid
-            }
-        }
-    } catch { }
-
-    # 3) Periodically dump visible windows for debugging
-    $debugCounter++
-    if ($debugCounter -ge 7) {
-        $debugCounter = 0
-        Write-Output "--- top-level windows ---"
-        try {
-            $root = [System.Windows.Automation.AutomationElement]::RootElement
-            $cond = New-Object System.Windows.Automation.PropertyCondition(
-                [System.Windows.Automation.AutomationElementIdentifiers]::ControlTypeProperty,
-                [System.Windows.Automation.ControlType]::Window)
-            $wins = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $cond)
-            for ($i = 0; $i -lt $wins.Count; $i++) {
-                $name = $wins[$i].Current.Name.Trim()
-                if ($name -ne '') { Write-Output "  $name" }
-            }
-        } catch { Write-Output "  (enum error: $_)" }
-        Write-Output "--- end ---"
-    }
-
-    Start-Sleep -Milliseconds 400
+    Start-Sleep -Milliseconds 500
 }
