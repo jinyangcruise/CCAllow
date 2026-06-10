@@ -102,16 +102,13 @@ while ($running) {
         $debugCounter = 0
         $isMin = [Win32]::IsIconic($claudeProcs[0].MainWindowHandle)
         Write-Output "--- top-level windows (minimized=$isMin) ---"
-        $seen = @{}
         [Win32]::EnumWindows({ param($h, $p)
-            if ($seen.ContainsKey($h)) { return $true }; $seen[$h] = $true
             $t = New-Object System.Text.StringBuilder 256
             $c = New-Object System.Text.StringBuilder 64
             [Win32]::GetWindowText($h, $t, 256) | Out-Null
             [Win32]::GetClassName($h, $c, 64) | Out-Null
             $tt = $t.ToString().Trim()
-            $cc = $c.ToString().Trim()
-            if ($tt -ne '') { Write-Output "  $cc : $tt" }
+            if ($tt -ne '') { Write-Output "  $($c.ToString().Trim()) : $tt" }
             return $true
         }, [IntPtr]::Zero) | Out-Null
         Write-Output "--- end ---"
