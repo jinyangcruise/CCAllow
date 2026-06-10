@@ -91,7 +91,8 @@ while ($running) {
     }
 
     # Claude IS minimized: periodically peek and check for Allow
-    [Win32]::ShowWindow($hwnd, 4) | Out-Null  # SW_SHOWNOACTIVATE (show behind others)
+    Write-Output "peek..."
+    [Win32]::ShowWindow($hwnd, 4) | Out-Null  # SW_SHOWNOACTIVATE
     Start-Sleep -Milliseconds 200
     try {
         $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
