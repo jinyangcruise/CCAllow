@@ -1,5 +1,8 @@
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
+Add-Type -Name U -Member @"
+[DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+"@
 
 $targets = @("Allow once", "Allow for this time", "Allow for this")
 $running = $true
@@ -55,20 +58,14 @@ while ($running) {
                 # Send Ctrl+Enter keyboard shortcut to Claude window
                 try {
                     $hwnd = $proc.MainWindowHandle
-                    Add-Type -Name K -Member @"
-[DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
-[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
-"@ -ErrorAction Stop
-                    [K]::SetForegroundWindow($hwnd) | Out-Null
-                    Start-Sleep -Milliseconds 50
                     $VK_CONTROL = 0x11; $VK_RETURN = 0x0D
                     $WM_KEYDOWN = 0x100; $WM_KEYUP = 0x101
-                    [K]::PostMessage($hwnd, $WM_KEYDOWN, [IntPtr]$VK_CONTROL, [IntPtr]::Zero) | Out-Null
+                    [U]::PostMessage($hwnd, $WM_KEYDOWN, [IntPtr]$VK_CONTROL, [IntPtr]::Zero) | Out-Null
                     Start-Sleep -Milliseconds 20
-                    [K]::PostMessage($hwnd, $WM_KEYDOWN, [IntPtr]$VK_RETURN, [IntPtr]::Zero) | Out-Null
+                    [U]::PostMessage($hwnd, $WM_KEYDOWN, [IntPtr]$VK_RETURN, [IntPtr]::Zero) | Out-Null
                     Start-Sleep -Milliseconds 20
-                    [K]::PostMessage($hwnd, $WM_KEYUP, [IntPtr]$VK_RETURN, [IntPtr]::Zero) | Out-Null
-                    [K]::PostMessage($hwnd, $WM_KEYUP, [IntPtr]$VK_CONTROL, [IntPtr]::Zero) | Out-Null
+                    [U]::PostMessage($hwnd, $WM_KEYUP, [IntPtr]$VK_RETURN, [IntPtr]::Zero) | Out-Null
+                    [U]::PostMessage($hwnd, $WM_KEYUP, [IntPtr]$VK_CONTROL, [IntPtr]::Zero) | Out-Null
                     Write-Output "clicked (Ctrl+Enter)!"
                 } catch { Write-Output "key error: $_" }
             }
