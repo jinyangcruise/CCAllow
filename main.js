@@ -37,7 +37,7 @@ function makeTrayIcon() {
 
 function createWindow() {
     mainWindow = new BrowserWindow({
-        width: 480, height: 320, resizable: false,
+        width: 480, height: 340, resizable: true,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true, nodeIntegration: false,
