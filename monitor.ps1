@@ -103,22 +103,12 @@ while ($running) {
             [System.Windows.Automation.AutomationElementIdentifiers]::ControlTypeProperty,
             [System.Windows.Automation.ControlType]::Button)
         $allBtns = $desktop.FindAll([System.Windows.Automation.TreeScope]::Subtree, $cond)
-        # Debug: walk UIA tree for elements with "Allow"/"Once" (up to depth 6)
-        function WalkNode($el, $depth) {
-            if ($depth -gt 6 -or -not $el) { return }
-            try {
-                $n = $el.Current.Name.Trim()
-                if ($n -match '(?i)allow|once') { Write-Output "    d$depth '$n' type=$($el.Current.ControlType.ProgrammaticName)" }
-            } catch { }
-            $child = $walker.GetFirstChild($el)
-            while ($child) { WalkNode $child ($depth + 1); $child = $walker.GetNextSibling($child) }
-        }
-        $walker = [System.Windows.Automation.TreeWalker]::new([System.Windows.Automation.Condition]::TrueCondition)
-        Write-Output "  scanning UIA tree (depth 6)..."
-        # Scan root children
-        $node = $walker.GetFirstChild([System.Windows.Automation.AutomationElement]::RootElement)
-        while ($node) { WalkNode $node 1; $node = $walker.GetNextSibling($node) }
-        Write-Output "  scan done"
+        # Debug: dump all process window titles to identify the notification
+        $titles = Get-Process | Where-Object { $_.MainWindowTitle -ne '' } |
+            Select-Object @{N='p';E={$_.ProcessName}}, @{N='t';E={$_.MainWindowTitle}}
+        Write-Output "  process windows:"
+        foreach ($item in $titles) { Write-Output "    $($item.p) : $($item.t)" }
+        if ($allBtns) {
         if ($allBtns) {
             for ($i = 0; $i -lt $allBtns.Count; $i++) {
                 $btn = $allBtns[$i]
