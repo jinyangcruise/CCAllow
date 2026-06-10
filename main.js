@@ -123,15 +123,25 @@ ipcMain.handle('set-auto-start', (_e, enabled) => {
     return { enabled };
 });
 
+ipcMain.handle('get-silent-start', () => {
+    const cfg = getConfig();
+    return { enabled: cfg.silentStart === true };
+});
+
+ipcMain.handle('set-silent-start', (_e, enabled) => {
+    saveConfig({ silentStart: enabled });
+    return { enabled };
+});
+
 app.isQuitting = false;
 app.on('before-quit', () => { app.isQuitting = true; stopMonitor(); });
 app.whenReady().then(() => {
     configPath = path.join(app.getPath('userData'), 'config.json');
     applyAutoStart();
-    // Start monitor before creating window so UI gets correct status
     const cfg = getConfig();
     if (cfg.autoStart !== false) startMonitor();
     createWindow();
     createTray();
+    if (cfg.silentStart === true) mainWindow.hide();
 });
 app.on('window-all-closed', () => {});

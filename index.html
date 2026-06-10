@@ -60,6 +60,17 @@ h1{font-size:20px;color:#fff}
     </label>
 </div>
 
+<div class="toggle-wrap" style="margin-top:10px">
+    <div>
+        <div class="toggle-label">静默启动</div>
+        <div class="toggle-desc">启动时不显示主窗口，仅在托盘运行</div>
+    </div>
+    <label class="toggle-switch">
+        <input type="checkbox" id="silentStart">
+        <span class="slider"></span>
+    </label>
+</div>
+
 <div id="status" class="status idle">就绪</div>
 <div class="log-top"><span>日志</span><button id="copyLog">复制</button></div>
 <div class="log" id="log">[CCAllow] 启动完成</div>
@@ -68,6 +79,7 @@ h1{font-size:20px;color:#fff}
 <script>
 var toggle = document.getElementById('toggle');
 var autoStart = document.getElementById('autoStart');
+var silentStartEl = document.getElementById('silentStart');
 var statusEl = document.getElementById('status');
 var logEl = document.getElementById('log');
 
@@ -91,6 +103,10 @@ window.ccallow.getAutoStart().then(function(state) {
     autoStart.checked = state.enabled;
 });
 
+window.ccallow.getSilentStart().then(function(state) {
+    silentStartEl.checked = state.enabled;
+});
+
 window.ccallow.onMonitorLog(function(msg) {
     log(msg);
 });
@@ -110,6 +126,11 @@ toggle.addEventListener('change', async function() {
 autoStart.addEventListener('change', async function() {
     var result = await window.ccallow.setAutoStart(autoStart.checked);
     log(result.enabled ? '已开启开机自动启动' : '已关闭开机自动启动');
+});
+
+silentStartEl.addEventListener('change', async function() {
+    var result = await window.ccallow.setSilentStart(silentStartEl.checked);
+    log(result.enabled ? '已开启静默启动' : '已关闭静默启动');
 });
 
 window.ccallow.onTrayToggle(async function() {
