@@ -174,10 +174,12 @@ ipcMain.handle('launch-claude', async (_event, claudePath, port) => {
 
     let attempts = [claudePath];
 
-    // For Store Apps, also try the execution alias
+    // For Store Apps, also try execution alias + cmd start
     if (isStoreApp) {
         const alias = path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WindowsApps', 'claude.exe');
         if (fs.existsSync(alias)) attempts.push(alias);
+        // cmd /c start uses ShellExecuteEx which handles Store apps
+        attempts.push('cmd:start');
     }
 
     for (const exe of attempts) {
@@ -185,9 +187,19 @@ ipcMain.handle('launch-claude', async (_event, claudePath, port) => {
         let launchOk = false;
 
         const code = await new Promise((resolve) => {
-            const proc = spawn(exe, [`--remote-debugging-port=${port}`], {
-                cwd: exeDir, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
-            });
+            let proc;
+            if (exe === 'cmd:start') {
+                const quotedPath = `"${claudePath}"`;
+                const cmd = `start "" /B ${quotedPath} --remote-debugging-port=${port}`;
+                if (mainWindow) mainWindow.webContents.send('launch-log', `[cmd] ${cmd}`);
+                proc = spawn('cmd', ['/c', cmd], {
+                    cwd: exeDir, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
+                });
+            } else {
+                proc = spawn(exe, [`--remote-debugging-port=${port}`], {
+                    cwd: exeDir, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
+                });
+            }
             proc.on('error', (err) => { resolve('err:' + err.message); });
             proc.stdout.on('data', (d) => { if (mainWindow) mainWindow.webContents.send('launch-log', d.toString().trim()); });
             proc.stderr.on('data', (d) => {
