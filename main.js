@@ -76,18 +76,20 @@ function startMonitor() {
     const psPath = path.join(__dirname, 'monitor.ps1');
     if (!fs.existsSync(psPath)) { return; }
 
-    monitorProcess = spawn('powershell', [
+    const proc = spawn('powershell', [
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', psPath,
     ], { stdio: ['pipe', 'pipe', 'pipe'] });
 
-    monitorProcess.stdout.on('data', (d) => {
+    const pid = proc.pid;
+    proc.stdout.on('data', (d) => {
         if (mainWindow) mainWindow.webContents.send('monitor-log', d.toString().trim());
     });
-    monitorProcess.stderr.on('data', (d) => {
+    proc.stderr.on('data', (d) => {
         if (mainWindow) mainWindow.webContents.send('monitor-log', '[err] ' + d.toString().trim());
     });
-    monitorProcess.on('error', () => { monitorProcess = null; monitorEnabled = false; rebuildTrayMenu(); });
-    monitorProcess.on('exit', () => { monitorProcess = null; monitorEnabled = false; rebuildTrayMenu(); });
+    proc.on('error', () => { if (monitorProcess && monitorProcess.pid === pid) { monitorProcess = null; monitorEnabled = false; rebuildTrayMenu(); } });
+    proc.on('exit', () => { if (monitorProcess && monitorProcess.pid === pid) { monitorProcess = null; monitorEnabled = false; rebuildTrayMenu(); } });
+    monitorProcess = proc;
     monitorEnabled = true;
     rebuildTrayMenu();
     // Send config

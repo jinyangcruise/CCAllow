@@ -96,9 +96,10 @@ while ($running) {
     # Check Claude window when NOT minimized
     if (-not $isMin) {
         try {
-            $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
-            if ($btn) { ClickButton $btn $p.Id }
-        } catch { }
+            $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+            $btn = FindAllowButton $root
+            if ($btn) { ClickButton $btn $p.Id; continue }
+        } catch { Write-Output "  check err: $_" }
         Start-Sleep -Milliseconds 400
         continue
     }
