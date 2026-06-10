@@ -150,9 +150,10 @@ window.ccallow.detectClaude().then(function(r) {
         detectedPath = r.path;
         claudePathInput.value = r.path;
         if (r.isStoreApp) {
-            setStatus(launchStatus, '检测到 Store 版 — CDP 调试不支持 Store 版，请安装非 Store 版', 'error');
-            log('[警告] Store 版不支持 --remote-debugging-port，启动功能将不可用');
-            log('请从 https://claude.ai/download 下载安装非 Store 版本');
+            setStatus(launchStatus, 'Store 版 (WindowsApps) — 带 --remote-debugging-port 参数会启动失败', 'error');
+            log('[提示] 你的 Claude 安装在 WindowsApps 目录下（Store 版）');
+            log('[提示] --remote-debugging-port 参数会导致启动失败 (exit code 1)');
+            log('[提示] 如果 claude.ai/download 提供的也是 Store 版，则此工具需要改用其他方式连接');
             launchBtn.disabled = true;
         } else {
             setStatus(launchStatus, '已检测到 Claude Desktop', 'success');
