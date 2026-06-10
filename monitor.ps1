@@ -84,7 +84,7 @@ function ClickButton($btn, $procId) {
     # Try InvokePattern (doesn't steal focus)
     try {
         $prevHwnd = [IntPtr]::Zero
-        try { $prevHwnd = [Win32]::GetForegroundWindow() } catch { }
+        try { $prevHwnd = [Win32]::GetForegroundWindow(); Write-Output "  prevHwnd=$prevHwnd" } catch { }
         $invoke = $btn.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
         if ($invoke) { $invoke.Invoke() }
         else { Write-Output "  no InvokePattern on '$name'"; throw }
@@ -94,12 +94,14 @@ function ClickButton($btn, $procId) {
             try {
                 $pid = 0
                 [Win32]::GetWindowThreadProcessId($prevHwnd, [ref]$pid) | Out-Null
+                Write-Output "  focus: prevHwnd=$prevHwnd pid=$pid"
                 if ($pid -gt 0) {
                     $wshell = New-Object -ComObject wscript.shell
-                    $wshell.AppActivate($pid) | Out-Null
-                }
-            } catch { }
-        }
+                    $result = $wshell.AppActivate($pid)
+                    Write-Output "  focus: AppActivate result=$result"
+                } else { Write-Output "  focus: invalid pid" }
+            } catch { Write-Output "  focus error: $_" }
+        } else { Write-Output "  focus: no prevHwnd" }
         Write-Output "clicked (InvokePattern)!"; return
     } catch { Write-Output "  InvokePattern error: $_" }
     # Fallback: activate + SendKeys
@@ -137,7 +139,7 @@ function EnableAnim($hwnd) {
 
 while ($running) {
     $loopCount++
-    if ($loopCount % 10 -eq 0) { Write-Output "alive (loop $loopCount, polling=$minimizedPolling, interval=$peekInterval)" }
+    if ($loopCount % 10 -eq 0) { # Write-Output "alive (loop $loopCount, polling=$minimizedPolling, interval=$peekInterval)" }
     if ($readTask.IsCompleted) {
         $line = $readTask.Result
         if ($null -eq $line) { $running = $false; break }
@@ -179,7 +181,7 @@ while ($running) {
         $sw = [Win32]::GetSystemMetrics(0); $sh = [Win32]::GetSystemMetrics(1)
         $pw = $wp.rcNormalPosition.Right - $wp.rcNormalPosition.Left
         $ph = $wp.rcNormalPosition.Bottom - $wp.rcNormalPosition.Top
-        Write-Output "  savedPos=($($wp.rcNormalPosition.Left),$($wp.rcNormalPosition.Top)) screen=($sw,$sh) win=($pw,$ph)"
+        # Write-Output "  savedPos=($($wp.rcNormalPosition.Left),$($wp.rcNormalPosition.Top)) screen=($sw,$sh) win=($pw,$ph)"
         # Set position while hidden, wait, then show (no flash)
         $offX = [Math]::Max(0, $sw - 10); $offY = [Math]::Max(0, $sh - 10 - 80)
         $r = $wp.rcNormalPosition
@@ -189,15 +191,15 @@ while ($running) {
         [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
         Start-Sleep -Milliseconds 100
         [Win32]::ShowWindow($hwnd, 4) | Out-Null  # SW_SHOWNOACTIVATE (show at new pos)
-        Write-Output "  target=$offX,$offY"
+        # Write-Output "  target=$offX,$offY"
         # Verify actual position
         $wp2 = New-Object WINDOWPLACEMENT
         $wp2.length = [System.Runtime.InteropServices.Marshal]::SizeOf($wp2)
         [Win32]::GetWindowPlacement($hwnd, [ref]$wp2) | Out-Null
-        Write-Output "  actual=$($wp2.rcNormalPosition.Left),$($wp2.rcNormalPosition.Top)"
+        # Write-Output "  actual=$($wp2.rcNormalPosition.Left),$($wp2.rcNormalPosition.Top)"
         [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
         Start-Sleep -Milliseconds 600
-        Write-Output "  checking..."
+        # Write-Output "  checking..."
         try {
             $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
             if ($btn) {
