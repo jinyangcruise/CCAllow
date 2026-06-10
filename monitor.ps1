@@ -1,8 +1,6 @@
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
-Add-Type -Name U -Member @"
-[DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
-"@
+Add-Type -AssemblyName System.Windows.Forms
 
 $targets = @("Allow once", "Allow for this time", "Allow for this")
 $running = $true
@@ -30,7 +28,7 @@ while ($running) {
         Write-Output "proc: $($proc.ProcessName) hwnd=$($proc.MainWindowHandle)"
         try {
             $root = [System.Windows.Automation.AutomationElement]::FromHandle($proc.MainWindowHandle)
-            if (-not $root) { Write-Output "  no UIA root"; continue }
+            if (-not $root) { Write-Output "no UIA root"; continue }
 
             $ctrlCond = New-Object System.Windows.Automation.PropertyCondition(
                 [System.Windows.Automation.AutomationElementIdentifiers]::ControlTypeProperty,
@@ -50,26 +48,23 @@ while ($running) {
                 }
                 if (-not $matched) { continue }
                 Write-Output "found: >>$name<<"
-                # Try Invoke pattern first (no interference)
+
+                # Try InvokePattern
                 try {
                     $invoke = [System.Windows.Automation.InvokePattern]::GetPattern($btn)
                     if ($invoke) { $invoke.Invoke(); Write-Output "clicked!"; continue }
                 } catch { }
-                # Send Ctrl+Enter keyboard shortcut to Claude window
+
+                # Fallback: activate Claude window and send Ctrl+Enter
                 try {
-                    $hwnd = $proc.MainWindowHandle
-                    $VK_CONTROL = 0x11; $VK_RETURN = 0x0D
-                    $WM_KEYDOWN = 0x100; $WM_KEYUP = 0x101
-                    [U]::PostMessage($hwnd, $WM_KEYDOWN, [IntPtr]$VK_CONTROL, [IntPtr]::Zero) | Out-Null
-                    Start-Sleep -Milliseconds 20
-                    [U]::PostMessage($hwnd, $WM_KEYDOWN, [IntPtr]$VK_RETURN, [IntPtr]::Zero) | Out-Null
-                    Start-Sleep -Milliseconds 20
-                    [U]::PostMessage($hwnd, $WM_KEYUP, [IntPtr]$VK_RETURN, [IntPtr]::Zero) | Out-Null
-                    [U]::PostMessage($hwnd, $WM_KEYUP, [IntPtr]$VK_CONTROL, [IntPtr]::Zero) | Out-Null
+                    $wshell = New-Object -ComObject wscript.shell
+                    $wshell.AppActivate($proc.Id) | Out-Null
+                    Start-Sleep -Milliseconds 100
+                    [System.Windows.Forms.SendKeys]::SendWait("^({ENTER})")
                     Write-Output "clicked (Ctrl+Enter)!"
                 } catch { Write-Output "key error: $_" }
             }
-        } catch { Write-Output "  error: $_" }
+        } catch { Write-Output "error: $_" }
     }
 
     Start-Sleep -Milliseconds 500
