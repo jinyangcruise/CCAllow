@@ -144,9 +144,11 @@ while ($running) {
         $pw = $savedNormal.Right - $savedNormal.Left
         $ph = $savedNormal.Bottom - $savedNormal.Top
         Write-Output "  savedPos=($($savedNormal.Left),$($savedNormal.Top)) screen=($sw,$sh) win=($pw,$ph)"
-        # Show at bottom-right, size 1x1 (invisible to user, but UIA still works)
+        # Show at bottom-right, minimal size where UIA still works
         $r = $wp.rcNormalPosition
-        $r.Left = $sw - 1; $r.Top = $sh - 1; $r.Right = $sw; $r.Bottom = $sh
+        $minW = 100; $minH = 100
+        $r.Left = $sw - $minW; $r.Top = $sh - $minH
+        $r.Right = $sw; $r.Bottom = $sh
         $wp.rcNormalPosition = $r
         $wp.showCmd = 8  # SW_SHOWNA (show without activating, no focus steal)
         [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
