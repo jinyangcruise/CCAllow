@@ -172,14 +172,41 @@ ipcMain.handle('launch-claude', async (_event, claudePath, port) => {
     const exeDir = path.dirname(claudePath);
     const isStoreApp = claudePath.includes('WindowsApps');
 
+    // Build list of paths to try
     let attempts = [claudePath];
 
-    // For Store Apps, also try execution alias + cmd start
     if (isStoreApp) {
-        const alias = path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WindowsApps', 'claude.exe');
-        if (fs.existsSync(alias)) attempts.push(alias);
-        // cmd /c start uses ShellExecuteEx which handles Store apps
-        attempts.push('cmd:start');
+        // For Store apps, the internal exe can't be spawned directly.
+        // Try the execution alias (reparse point that triggers Store activation)
+        const appsDir = path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WindowsApps');
+        for (const name of ['claude.exe', 'Claude.exe']) {
+            const fp = path.join(appsDir, name);
+            if (fs.existsSync(fp)) { attempts.push(fp); break; }
+        }
+        // If alias not found, try running `where claude` to locate it
+        if (attempts.length === 1) {
+            if (mainWindow) mainWindow.webContents.send('launch-log', 'Looking for Claude execution alias...');
+            const whereOut = await new Promise(resolve => {
+                const proc = spawn('where', ['claude'], { stdio: ['ignore', 'pipe', 'pipe'] });
+                let out = '';
+                proc.stdout.on('data', d => out += d.toString());
+                proc.on('close', () => resolve(out.trim()));
+            });
+            const lines = whereOut.split(/\r?\n/).filter(Boolean);
+            for (const line of lines) {
+                const fp = line.trim();
+                if (fp && fp !== claudePath && fs.existsSync(fp)) {
+                    attempts.push(fp);
+                    if (mainWindow) mainWindow.webContents.send('launch-log', `Found alias: ${fp}`);
+                    break;
+                }
+            }
+        }
+        if (attempts.length === 1) {
+            if (mainWindow) mainWindow.webContents.send('launch-log',
+                'Store apps can\'t be launched directly. Install non-Store version from https://claude.ai/download or run: ' +
+                `claude --remote-debugging-port=${port}`);
+        }
     }
 
     for (const exe of attempts) {
@@ -187,19 +214,9 @@ ipcMain.handle('launch-claude', async (_event, claudePath, port) => {
         let launchOk = false;
 
         const code = await new Promise((resolve) => {
-            let proc;
-            if (exe === 'cmd:start') {
-                const quotedPath = `"${claudePath}"`;
-                const cmd = `start "" /B ${quotedPath} --remote-debugging-port=${port}`;
-                if (mainWindow) mainWindow.webContents.send('launch-log', `[cmd] ${cmd}`);
-                proc = spawn('cmd', ['/c', cmd], {
-                    cwd: exeDir, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
-                });
-            } else {
-                proc = spawn(exe, [`--remote-debugging-port=${port}`], {
-                    cwd: exeDir, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
-                });
-            }
+            const proc = spawn(exe, [`--remote-debugging-port=${port}`], {
+                cwd: exeDir, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
+            });
             proc.on('error', (err) => { resolve('err:' + err.message); });
             proc.stdout.on('data', (d) => { if (mainWindow) mainWindow.webContents.send('launch-log', d.toString().trim()); });
             proc.stderr.on('data', (d) => {
