@@ -100,18 +100,20 @@ while ($running) {
     $debugCounter++
     if ($debugCounter -ge 7) {
         $debugCounter = 0
-        $isMin = [Win32]::IsIconic($claudeProcs[0].MainWindowHandle)
-        Write-Output "--- top-level windows (minimized=$isMin) ---"
-        [Win32]::EnumWindows({ param($h, $p)
-            $t = New-Object System.Text.StringBuilder 256
-            $c = New-Object System.Text.StringBuilder 64
-            [Win32]::GetWindowText($h, $t, 256) | Out-Null
-            [Win32]::GetClassName($h, $c, 64) | Out-Null
-            $tt = $t.ToString().Trim()
-            if ($tt -ne '') { Write-Output "  $($c.ToString().Trim()) : $tt" }
-            return $true
-        }, [IntPtr]::Zero) | Out-Null
+        Write-Output "--- top-level windows ---"
+        try {
+            $root = [System.Windows.Automation.AutomationElement]::RootElement
+            $cond = New-Object System.Windows.Automation.PropertyCondition(
+                [System.Windows.Automation.AutomationElementIdentifiers]::ControlTypeProperty,
+                [System.Windows.Automation.ControlType]::Window)
+            $wins = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $cond)
+            for ($i = 0; $i -lt $wins.Count; $i++) {
+                $name = $wins[$i].Current.Name.Trim()
+                if ($name -ne '') { Write-Output "  $name" }
+            }
+        } catch { Write-Output "  (enum error: $_)" }
         Write-Output "--- end ---"
+    }
     }
 
     Start-Sleep -Milliseconds 400
