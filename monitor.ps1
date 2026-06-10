@@ -13,7 +13,7 @@ public class Win32 {
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-    [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+    [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, IntPtr attrValue, int attrSize);
 }
 "@
 
@@ -111,19 +111,32 @@ while ($running) {
 
     # Claude IS minimized
     if ($minimizedPolling) {
-        # Move minimized window off-screen then restore
-        [Win32]::SetWindowPos($hwnd, [IntPtr]::Zero, 4000, 3000, 0, 0, 0x0001 -bor 0x0004 -bor 0x0010) | Out-Null
+        # Cloak window (hidden from desktop) then restore for UIA
+        $cloakMem = [System.Runtime.InteropServices.Marshal]::AllocHGlobal(4)
+        [System.Runtime.InteropServices.Marshal]::WriteInt32($cloakMem, 0, 1)
+        [Win32]::DwmSetWindowAttribute($hwnd, 14, $cloakMem, 4) | Out-Null
+        [System.Runtime.InteropServices.Marshal]::FreeHGlobal($cloakMem)
         [Win32]::ShowWindow($hwnd, 9) | Out-Null  # SW_RESTORE
         Start-Sleep -Milliseconds 300
         Write-Output "  checking..."
         try {
             $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
             if ($btn) {
+                # Uncloak
+                $cloakMem = [System.Runtime.InteropServices.Marshal]::AllocHGlobal(4)
+                [System.Runtime.InteropServices.Marshal]::WriteInt32($cloakMem, 0, 0)
+                [Win32]::DwmSetWindowAttribute($hwnd, 14, $cloakMem, 4) | Out-Null
+                [System.Runtime.InteropServices.Marshal]::FreeHGlobal($cloakMem)
                 ClickButton $btn $p.Id
                 continue
             }
         } catch { }
         [Win32]::ShowWindow($hwnd, 6) | Out-Null  # SW_MINIMIZE
+        # Uncloak
+        $cloakMem = [System.Runtime.InteropServices.Marshal]::AllocHGlobal(4)
+        [System.Runtime.InteropServices.Marshal]::WriteInt32($cloakMem, 0, 0)
+        [Win32]::DwmSetWindowAttribute($hwnd, 14, $cloakMem, 4) | Out-Null
+        [System.Runtime.InteropServices.Marshal]::FreeHGlobal($cloakMem)
         Start-Sleep -Milliseconds $peekInterval
     } else {
         Start-Sleep -Milliseconds 1000
