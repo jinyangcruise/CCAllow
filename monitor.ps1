@@ -13,7 +13,6 @@ public class Win32 {
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-    [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, IntPtr attrValue, int attrSize);
 }
 "@
 
@@ -58,11 +57,15 @@ function FindAllowButton($root) {
 function ClickButton($btn, $procId) {
     $name = $btn.Current.Name.Trim()
     Write-Output "found: >>$name<<"
+    # Try InvokePattern (doesn't steal focus)
     try {
         $invoke = [System.Windows.Automation.InvokePattern]::GetPattern($btn)
-        if ($invoke) { $invoke.Invoke(); Write-Output "clicked!"; return }
-    } catch { }
+        if ($invoke) { $invoke.Invoke(); Write-Output "clicked (InvokePattern)!"; return }
+        else { Write-Output "  no InvokePattern on '$name'" }
+    } catch { Write-Output "  InvokePattern error: $_" }
+    # Fallback: activate + SendKeys
     try {
+        Write-Output "  SendKeys fallback..."
         $prevHwnd = [IntPtr]::Zero
         try { $prevHwnd = [Win32]::GetForegroundWindow() } catch { }
         $wshell = New-Object -ComObject wscript.shell
@@ -111,32 +114,14 @@ while ($running) {
 
     # Claude IS minimized
     if ($minimizedPolling) {
-        # Cloak window (hidden from desktop) then restore for UIA
-        $cloakMem = [System.Runtime.InteropServices.Marshal]::AllocHGlobal(4)
-        [System.Runtime.InteropServices.Marshal]::WriteInt32($cloakMem, 0, 1)
-        [Win32]::DwmSetWindowAttribute($hwnd, 14, $cloakMem, 4) | Out-Null
-        [System.Runtime.InteropServices.Marshal]::FreeHGlobal($cloakMem)
         [Win32]::ShowWindow($hwnd, 9) | Out-Null  # SW_RESTORE
         Start-Sleep -Milliseconds 300
         Write-Output "  checking..."
         try {
             $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
-            if ($btn) {
-                # Uncloak
-                $cloakMem = [System.Runtime.InteropServices.Marshal]::AllocHGlobal(4)
-                [System.Runtime.InteropServices.Marshal]::WriteInt32($cloakMem, 0, 0)
-                [Win32]::DwmSetWindowAttribute($hwnd, 14, $cloakMem, 4) | Out-Null
-                [System.Runtime.InteropServices.Marshal]::FreeHGlobal($cloakMem)
-                ClickButton $btn $p.Id
-                continue
-            }
+            if ($btn) { ClickButton $btn $p.Id; continue }
         } catch { }
         [Win32]::ShowWindow($hwnd, 6) | Out-Null  # SW_MINIMIZE
-        # Uncloak
-        $cloakMem = [System.Runtime.InteropServices.Marshal]::AllocHGlobal(4)
-        [System.Runtime.InteropServices.Marshal]::WriteInt32($cloakMem, 0, 0)
-        [Win32]::DwmSetWindowAttribute($hwnd, 14, $cloakMem, 4) | Out-Null
-        [System.Runtime.InteropServices.Marshal]::FreeHGlobal($cloakMem)
         Start-Sleep -Milliseconds $peekInterval
     } else {
         Start-Sleep -Milliseconds 1000
