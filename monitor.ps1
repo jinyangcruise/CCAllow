@@ -139,7 +139,7 @@ function EnableAnim($hwnd) {
 
 while ($running) {
     $loopCount++
-    if ($loopCount % 10 -eq 0) { # Write-Output "alive (loop $loopCount, polling=$minimizedPolling, interval=$peekInterval)" }
+    if ($loopCount % 10 -eq 0) { } # Write-Output "alive (loop ...)" }
     if ($readTask.IsCompleted) {
         $line = $readTask.Result
         if ($null -eq $line) { $running = $false; break }
