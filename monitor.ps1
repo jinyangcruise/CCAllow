@@ -144,33 +144,15 @@ while ($running) {
         $pw = $savedNormal.Right - $savedNormal.Left
         $ph = $savedNormal.Bottom - $savedNormal.Top
         Write-Output "  savedPos=($($savedNormal.Left),$($savedNormal.Top)) screen=($sw,$sh) win=($pw,$ph)"
-        # Show at bottom-right, minimal size where UIA still works
-        $r = $wp.rcNormalPosition
-        $minW = 100; $minH = 100
-        $r.Left = $sw - $minW; $r.Top = $sh - $minH
-        $r.Right = $sw; $r.Bottom = $sh
-        $wp.rcNormalPosition = $r
-        $wp.showCmd = 8  # SW_SHOWNA (show without activating, no focus steal)
-        [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
-        Start-Sleep -Milliseconds 300
-        # Verify actual position
-        $wp2 = New-Object WINDOWPLACEMENT
-        $wp2.length = [System.Runtime.InteropServices.Marshal]::SizeOf($wp2)
-        [Win32]::GetWindowPlacement($hwnd, [ref]$wp2) | Out-Null
-        Write-Output "  pos=($($wp2.rcNormalPosition.Left),$($wp2.rcNormalPosition.Top)) size=$($wp2.rcNormalPosition.Right - $wp2.rcNormalPosition.Left)x$($wp2.rcNormalPosition.Bottom - $wp2.rcNormalPosition.Top)"
+        # Restore at original size/position, check Allow via InvokePattern (no focus steal)
+        [Win32]::ShowWindow($hwnd, 4) | Out-Null  # SW_SHOWNOACTIVATE
+        Start-Sleep -Milliseconds 600
         Write-Output "  checking..."
         try {
             $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
-            if ($btn) {
-                $wp.rcNormalPosition = $savedNormal
-                [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
-                ClickButton $btn $p.Id
-                continue
-            }
-        } catch { }
-        $wp.showCmd = 6  # SW_MINIMIZE
-        $wp.rcNormalPosition = $savedNormal
-        [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
+            if ($btn) { ClickButton $btn $p.Id; continue }
+        } catch { Write-Output "  check error: $_" }
+        [Win32]::ShowWindow($hwnd, 6) | Out-Null  # SW_MINIMIZE
         Start-Sleep -Milliseconds $peekInterval
     } else {
         Start-Sleep -Milliseconds 1000
