@@ -96,7 +96,38 @@ while ($running) {
         } catch { }
     }
 
-    # 2) Periodically dump top-level windows for debugging
+    # 2) Search entire UIA tree for Allow buttons (catches Toast notifications, dialogs)
+    try {
+        $desktop = [System.Windows.Automation.AutomationElement]::RootElement
+        $cond = New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElementIdentifiers]::ControlTypeProperty,
+            [System.Windows.Automation.ControlType]::Button)
+        $allBtns = $desktop.FindAll([System.Windows.Automation.TreeScope]::Subtree, $cond)
+        if ($allBtns -and $allBtns.Count -gt 0) {
+            for ($i = 0; $i -lt $allBtns.Count; $i++) {
+                $btn = $allBtns[$i]
+                $name = $btn.Current.Name.Trim()
+                if (-not $btn.Current.IsEnabled) { continue }
+                $matched = $false
+                foreach ($t in $targets) {
+                    if ($name.StartsWith($t)) { $matched = $t; break }
+                }
+                if (-not $matched) { continue }
+                # Found Allow button - get the owning process PID
+                $ownerPid = 0
+                try {
+                    $hwnd2 = $btn.Current.NativeWindowHandle
+                    if ($hwnd2 -ne 0) {
+                        [Win32]::GetWindowThreadProcessId($hwnd2, [ref]$ownerPid) | Out-Null
+                    }
+                } catch { }
+                if ($ownerPid -eq 0) { $ownerPid = $claudeProcs[0].Id }
+                ClickButton $btn $ownerPid
+            }
+        }
+    } catch { }
+
+    # 3) Periodically dump visible windows for debugging
     $debugCounter++
     if ($debugCounter -ge 7) {
         $debugCounter = 0
