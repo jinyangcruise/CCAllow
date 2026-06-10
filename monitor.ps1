@@ -166,7 +166,7 @@ while ($running) {
         $r = $wp.rcNormalPosition
         $r.Left = $offX; $r.Top = $offY; $r.Right = $offX + $pw; $r.Bottom = $offY + $ph
         $wp.rcNormalPosition = $r
-        $wp.showCmd = 2  # SW_SHOWMINIMIZED (window stays minimized, just updates position)
+        $wp.showCmd = 6  # SW_MINIMIZE (keep minimized without activating)
         [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
         Start-Sleep -Milliseconds 100
         [Win32]::ShowWindow($hwnd, 4) | Out-Null  # SW_SHOWNOACTIVATE (show at new pos)
