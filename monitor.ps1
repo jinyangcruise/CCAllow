@@ -25,6 +25,7 @@ $reader = [System.IO.StreamReader]::new([System.Console]::OpenStandardInput())
 $readTask = $reader.ReadLineAsync()
 
 function HandleCommand($line) {
+    if (-not $line) { return }
     if ($line -eq "exit") { $running = $false; return }
     if ($line -match '^interval:(\d+)$') { $peekInterval = [int]$Matches[1]; return }
     if ($line -eq "polling:on") { $minimizedPolling = $true; return }
@@ -74,7 +75,9 @@ function ClickButton($btn, $procId) {
 
 while ($running) {
     if ($readTask.IsCompleted) {
-        $line = $readTask.Result.Trim()
+        $line = $readTask.Result
+        if ($null -eq $line) { $running = $false; break }
+        $line = $line.Trim()
         HandleCommand $line
         if (-not $running) { break }
         $readTask = $reader.ReadLineAsync()
