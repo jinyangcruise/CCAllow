@@ -161,19 +161,21 @@ while ($running) {
         $pw = $wp.rcNormalPosition.Right - $wp.rcNormalPosition.Left
         $ph = $wp.rcNormalPosition.Bottom - $wp.rcNormalPosition.Top
         Write-Output "  savedPos=($($wp.rcNormalPosition.Left),$($wp.rcNormalPosition.Top)) screen=($sw,$sh) win=($pw,$ph)"
-        # One-shot: set position to near bottom-right, keep original size
+        # Set position while hidden, wait, then show (no flash)
         $offX = [Math]::Max(0, $sw - 10); $offY = [Math]::Max(0, $sh - 10 - 80)
         $r = $wp.rcNormalPosition
         $r.Left = $offX; $r.Top = $offY; $r.Right = $offX + $pw; $r.Bottom = $offY + $ph
         $wp.rcNormalPosition = $r
-        $wp.showCmd = 4  # SW_SHOWNOACTIVATE
+        $wp.showCmd = 0  # SW_HIDE (update position while hidden)
         [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
-        Write-Output "  pos=($offX,$offY) size=($pw,$ph)"
+        Start-Sleep -Milliseconds 100
+        [Win32]::ShowWindow($hwnd, 4) | Out-Null  # SW_SHOWNOACTIVATE (show at new pos)
+        Write-Output "  target=$offX,$offY"
         # Verify actual position
         $wp2 = New-Object WINDOWPLACEMENT
         $wp2.length = [System.Runtime.InteropServices.Marshal]::SizeOf($wp2)
         [Win32]::GetWindowPlacement($hwnd, [ref]$wp2) | Out-Null
-        Write-Output "  actual=($($wp2.rcNormalPosition.Left),$($wp2.rcNormalPosition.Top)) size=$($wp2.rcNormalPosition.Right - $wp2.rcNormalPosition.Left)x$($wp2.rcNormalPosition.Bottom - $wp2.rcNormalPosition.Top)"
+        Write-Output "  actual=$($wp2.rcNormalPosition.Left),$($wp2.rcNormalPosition.Top)"
         [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
         Start-Sleep -Milliseconds 600
         Write-Output "  checking..."
@@ -188,6 +190,9 @@ while ($running) {
             }
         } catch { Write-Output "  check error: $_" }
         EnableAnim $hwnd
+        # minimize first, then restore position (no animation)
+        [Win32]::ShowWindow($hwnd, 6) | Out-Null  # SW_MINIMIZE
+        Start-Sleep -Milliseconds 100
         [Win32]::SetWindowPlacement($hwnd, [ref]$savedWp) | Out-Null
         Start-Sleep -Milliseconds $peekInterval
     } else {
