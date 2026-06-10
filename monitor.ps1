@@ -22,6 +22,7 @@ public class Win32 {
 
 $targets = @("Allow", "Allow once", "Allow for this time", "Allow for this")
 $running = $true
+$debugCounter = 0
 
 $reader = [System.IO.StreamReader]::new([System.Console]::OpenStandardInput())
 $readTask = $reader.ReadLineAsync()
@@ -95,49 +96,25 @@ while ($running) {
         } catch { }
     }
 
-    # 2) Scan ALL top-level windows for Allow-related dialogs (notifications, permission dialogs)
-    $dialogHwnds = New-Object System.Collections.ArrayList
-    $seenHwnds = @{}
-    $knownPids = @{}; foreach ($p in $claudeProcs) { $knownPids[$p.Id] = $true }
-
-    $collector = [Win32+EnumWindowsProc]{
-        param($hWnd, $lParam)
-        if ($seenHwnds.ContainsKey($hWnd)) { return $true }
-        $seenHwnds[$hWnd] = $true
-        $title = New-Object System.Text.StringBuilder 256
-        $cls = New-Object System.Text.StringBuilder 64
-        [Win32]::GetWindowText($hWnd, $title, 256) | Out-Null
-        [Win32]::GetClassName($hWnd, $cls, 64) | Out-Null
-        $t = $title.ToString().Trim()
-        $c = $cls.ToString().Trim()
-        $ownerPid = 0
-        [Win32]::GetWindowThreadProcessId($hWnd, [ref]$ownerPid) | Out-Null
-        $isClaude = $knownPids.ContainsKey($ownerPid)
-        # Log Claude-related or Allow-related windows
-        if ($isClaude -or $t -match '(?i)allow|claude|permission' -or $c -eq '#32770') {
-            Write-Output "  win: cls=$c title='$t' pid=$ownerPid claude=$isClaude"
-        }
-        # Collect Claude windows (excluding main) AND any dialog with Allow in title
-        if ($isClaude -or $t -match '(?i)allow' -or $c -eq '#32770') {
-            [void]$dialogHwnds.Add($hWnd)
-        }
-        return $true
-    }
-    [Win32]::EnumWindows($collector, [IntPtr]::Zero) | Out-Null
-
-    # Also check children of main Claude windows
-    foreach ($hwnd in $claudePids.Values) {
-        [Win32]::EnumChildWindows($hwnd, $collector, [IntPtr]::Zero) | Out-Null
-    }
-
-    foreach ($hwnd in $dialogHwnds) {
-        try {
-            $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
-            $ownerPid = 0
-            [Win32]::GetWindowThreadProcessId($hwnd, [ref]$ownerPid) | Out-Null
-            $btn = FindAllowButton $root
-            if ($btn) { ClickButton $btn $ownerPid }
-        } catch { }
+    # 2) Periodically dump top-level windows for debugging
+    $debugCounter++
+    if ($debugCounter -ge 50) {
+        $debugCounter = 0
+        $isMin = [Win32]::IsIconic($claudeProcs[0].MainWindowHandle)
+        Write-Output "--- top-level windows (minimized=$isMin) ---"
+        $seen = @{}
+        [Win32]::EnumWindows({ param($h, $p)
+            if ($seen.ContainsKey($h)) { return $true }; $seen[$h] = $true
+            $t = New-Object System.Text.StringBuilder 256
+            $c = New-Object System.Text.StringBuilder 64
+            [Win32]::GetWindowText($h, $t, 256) | Out-Null
+            [Win32]::GetClassName($h, $c, 64) | Out-Null
+            $tt = $t.ToString().Trim()
+            $cc = $c.ToString().Trim()
+            if ($tt -ne '') { Write-Output "  $cc : $tt" }
+            return $true
+        }, [IntPtr]::Zero) | Out-Null
+        Write-Output "--- end ---"
     }
 
     Start-Sleep -Milliseconds 400
