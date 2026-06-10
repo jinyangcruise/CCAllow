@@ -93,33 +93,29 @@ while ($running) {
         continue
     }
 
-    # Claude IS minimized: monitor window title for changes
-    $title = New-Object System.Text.StringBuilder 256
-    [Win32]::GetWindowText($hwnd, $title, 256) | Out-Null
-    $currentTitle = $title.ToString().Trim()
-
-    if ($currentTitle -ne $lastTitle) {
-        Write-Output "title changed: '$lastTitle' -> '$currentTitle'"
-        $lastTitle = $currentTitle
-    }
-
-    # If title suggests a permission dialog (keywords), restore and check
-    if ($currentTitle -match '(?i)allow|permission|confirm|approve') {
-        Write-Output "title suggests permission dialog, restoring..."
-        [Win32]::ShowWindow($hwnd, 9) | Out-Null  # SW_RESTORE
-        # Wait for Chromium to restore its UIA tree
-        Start-Sleep -Milliseconds 800
-        try {
-            $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
-            if ($btn) {
-                ClickButton $btn $p.Id
-                # Don't minimize back - user needs to see the result
-            } else {
-                Write-Output "  no Allow button found, minimizing back"
-                [Win32]::ShowWindow($hwnd, 6) | Out-Null  # SW_MINIMIZE
+    # Claude IS minimized: check if Toast notification is visible on screen
+    try {
+        $desktop = [System.Windows.Automation.AutomationElement]::RootElement
+        # Only search on-screen elements (Toast is on-screen)
+        $visCond = New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElementIdentifiers]::IsOffscreenProperty, $false)
+        $btnCond = New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElementIdentifiers]::ControlTypeProperty,
+            [System.Windows.Automation.ControlType]::Button)
+        $andCond = New-Object System.Windows.Automation.AndCondition($visCond, $btnCond)
+        $btns = $desktop.FindAll([System.Windows.Automation.TreeScope]::Subtree, $andCond)
+        if ($btns -and $btns.Count -gt 0) {
+            for ($i = 0; $i -lt $btns.Count; $i++) {
+                $name = $btns[$i].Current.Name.Trim()
+                if ($name -ne '') { Write-Output "  visible btn: '$name'" }
+                $matched = $false
+                foreach ($t in $targets) {
+                    if ($name.StartsWith($t)) { $matched = $t; break }
+                }
+                if ($matched) { ClickButton $btns[$i] $p.Id; break }
             }
-        } catch { }
-    }
+        }
+    } catch { Write-Output "  vis scan error: $_" }
 
     Start-Sleep -Milliseconds 500
 }
