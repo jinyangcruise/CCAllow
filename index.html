@@ -5,9 +5,9 @@
 <title>CCAllow</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:system-ui,sans-serif;background:#1a1a2e;color:#e0e0e0;padding:24px;display:flex;flex-direction:column;height:100vh}
+body{font-family:system-ui,sans-serif;background:#1a1a2e;color:#e0e0e0;padding:20px 24px}
 h1{font-size:20px;color:#fff}
-.subtitle{font-size:12px;color:#64748b;margin-bottom:20px}
+.subtitle{font-size:12px;color:#64748b;margin-bottom:16px}
 .toggle-wrap{background:#16213e;border:1px solid #2d2d4a;border-radius:12px;padding:20px;display:flex;align-items:center;justify-content:space-between}
 .toggle-label{font-size:14px;color:#e0e0e0}
 .toggle-desc{font-size:12px;color:#64748b;margin-top:4px}
@@ -17,11 +17,12 @@ h1{font-size:20px;color:#fff}
 .slider::before{content:'';position:absolute;width:20px;height:20px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
 .toggle-switch input:checked+.slider{background:#4f46e5}
 .toggle-switch input:checked+.slider::before{transform:translateX(22px)}
-.status{margin-top:16px;padding:8px 12px;border-radius:8px;font-size:13px}
+.status{margin-top:12px;padding:8px 12px;border-radius:8px;font-size:13px}
 .status.idle{background:#1e3a5f;color:#93c5fd}
 .status.active{background:#14532d;color:#86efac}
 .status.error{background:#450a0a;color:#fca5a5}
-.footer{margin-top:auto;text-align:center;font-size:11px;color:#475569;padding-top:16px}
+.log{margin-top:10px;background:#0f172a;border-radius:8px;padding:8px;height:90px;overflow-y:auto;font-size:11px;font-family:monospace;white-space:pre-wrap;color:#94a3b8}
+.footer{margin-top:auto;text-align:center;font-size:11px;color:#475569;padding-top:12px}
 </style>
 </head>
 <body>
@@ -41,15 +42,23 @@ h1{font-size:20px;color:#fff}
 </div>
 
 <div id="status" class="status idle">就绪</div>
-<div class="footer">无需 CDP · 通过 Windows UI Automation 工作</div>
+<div class="log" id="log">[CCAllow] 启动完成</div>
+<div class="footer">通过 Windows UI Automation 工作</div>
 
 <script>
 var toggle = document.getElementById('toggle');
 var statusEl = document.getElementById('status');
+var logEl = document.getElementById('log');
 
 function setStatus(msg, type) {
     statusEl.textContent = msg;
     statusEl.className = 'status ' + (type || 'idle');
+}
+
+function log(msg) {
+    var time = new Date().toLocaleTimeString();
+    logEl.textContent += '\n[' + time + '] ' + msg;
+    logEl.scrollTop = logEl.scrollHeight;
 }
 
 window.ccallow.getStatus().then(function(state) {
@@ -57,20 +66,33 @@ window.ccallow.getStatus().then(function(state) {
     if (state.enabled) setStatus('监控中...', 'active');
 });
 
+window.ccallow.onMonitorLog(function(msg) {
+    log(msg);
+});
+
 toggle.addEventListener('change', async function() {
     var result = await window.ccallow.toggleMonitor();
     toggle.checked = result.enabled;
-    if (result.enabled) setStatus('监控中... 检测到 Allow 按钮将自动点击', 'active');
-    else setStatus('已停止', 'idle');
+    if (result.enabled) {
+        setStatus('监控中... 检测到 Allow 按钮将自动点击', 'active');
+        log('监控已启动');
+    } else {
+        setStatus('已停止', 'idle');
+        log('监控已停止');
+    }
 });
 
 window.ccallow.onTrayToggle(function() {
-    // Tray triggered toggle - sync checkbox state
     setTimeout(async function() {
         var state = await window.ccallow.getStatus();
         toggle.checked = state.enabled;
-        if (state.enabled) setStatus('监控中...', 'active');
-        else setStatus('已停止', 'idle');
+        if (state.enabled) {
+            setStatus('监控中...', 'active');
+            log('监控已启动');
+        } else {
+            setStatus('已停止', 'idle');
+            log('监控已停止');
+        }
     }, 100);
 });
 </script>

@@ -1,15 +1,13 @@
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 
-$targets = @("Allow", "Allow for this time", "Allow for this")
+$targets = @("Allow", "Allow once", "Allow for this time", "Allow for this")
 $running = $true
 
-# Setup stdin reader on a background job so we can receive "exit" command
 $reader = [System.IO.StreamReader]::new([System.Console]::OpenStandardInput())
 $readTask = $reader.ReadLineAsync()
 
 while ($running) {
-    # Non-blocking check for stdin commands
     if ($readTask.IsCompleted) {
         $line = $readTask.Result.Trim()
         if ($line -eq "exit") { $running = $false; break }
@@ -33,11 +31,20 @@ while ($running) {
             for ($i = 0; $i -lt $buttons.Count; $i++) {
                 $btn = $buttons[$i]
                 if (-not $btn.Current.IsEnabled) { continue }
-                $name = $btn.Current.Name
+                $name = $btn.Current.Name.Trim()
                 foreach ($t in $targets) {
                     if ($name -eq $t) {
-                        $invoke = [System.Windows.Automation.InvokePattern]::GetPattern($btn)
-                        if ($invoke) { $invoke.Invoke() }
+                        Write-Output "found: [$name]"
+                        try {
+                            $invoke = [System.Windows.Automation.InvokePattern]::GetPattern($btn)
+                            if ($invoke) { $invoke.Invoke(); Write-Output "clicked: $t" }
+                        } catch {
+                            # fallback: try LegacyIAccessible
+                            try {
+                                $legacy = [System.Windows.Automation.LegacyIAccessiblePattern]::GetPattern($btn)
+                                if ($legacy) { $legacy.DoDefaultAction(); Write-Output "clicked(legacy): $t" }
+                            } catch { Write-Output "click failed: $t" }
+                        }
                         break
                     }
                 }

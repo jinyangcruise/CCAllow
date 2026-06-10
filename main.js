@@ -77,6 +77,12 @@ function startMonitor() {
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', psPath,
     ], { stdio: ['pipe', 'pipe', 'pipe'] });
 
+    monitorProcess.stdout.on('data', (d) => {
+        if (mainWindow) mainWindow.webContents.send('monitor-log', d.toString().trim());
+    });
+    monitorProcess.stderr.on('data', (d) => {
+        if (mainWindow) mainWindow.webContents.send('monitor-log', '[err] ' + d.toString().trim());
+    });
     monitorProcess.on('error', () => { monitorProcess = null; monitorEnabled = false; rebuildTrayMenu(); });
     monitorProcess.on('exit', () => { monitorProcess = null; monitorEnabled = false; rebuildTrayMenu(); });
     monitorEnabled = true;
