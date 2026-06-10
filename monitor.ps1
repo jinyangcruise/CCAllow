@@ -2,13 +2,15 @@ Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Windows.Forms
 
-# Win32 API via full C# class definition
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
 public class Win32 {
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    public const int SW_RESTORE = 9;
 }
 "@
 
@@ -64,15 +66,17 @@ while ($running) {
                     if ($invoke) { $invoke.Invoke(); Write-Output "clicked!"; continue }
                 } catch { }
 
-                # 2. Save foreground, activate Claude, SendKeys Ctrl+Enter, restore
+                # 2. Save foreground, restore Claude if minimized, SendKeys Ctrl+Enter, restore prev window
                 try {
                     $prevHwnd = [IntPtr]::Zero
                     try { $prevHwnd = [Win32]::GetForegroundWindow() } catch { }
+                    $hwnd = $proc.MainWindowHandle
+                    if ([Win32]::IsIconic($hwnd)) { [Win32]::ShowWindow($hwnd, [Win32]::SW_RESTORE) | Out-Null }
                     $wshell = New-Object -ComObject wscript.shell
                     $wshell.AppActivate($proc.Id) | Out-Null
                     Start-Sleep -Milliseconds 100
                     [System.Windows.Forms.SendKeys]::SendWait("^({ENTER})")
-                    if ($prevHwnd -and $prevHwnd -ne [IntPtr]::Zero -and $prevHwnd -ne $proc.MainWindowHandle) {
+                    if ($prevHwnd -and $prevHwnd -ne [IntPtr]::Zero -and $prevHwnd -ne $hwnd) {
                         try { [Win32]::SetForegroundWindow($prevHwnd) | Out-Null } catch { }
                     }
                     Write-Output "clicked (SendKeys)!"
