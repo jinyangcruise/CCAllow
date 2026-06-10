@@ -81,7 +81,7 @@ function ClickButton($btn, $procId) {
     Write-Output "found: >>$name<<"
     # Try InvokePattern (doesn't steal focus)
     try {
-        $invoke = [System.Windows.Automation.InvokePattern]::GetPattern($btn)
+        $invoke = $btn.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
         if ($invoke) { $invoke.Invoke(); Write-Output "clicked (InvokePattern)!"; return }
         else { Write-Output "  no InvokePattern on '$name'" }
     } catch { Write-Output "  InvokePattern error: $_" }
