@@ -5,33 +5,33 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 public class Win32 {
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-    [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder text, int count);
+    [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 }
 "@
 
-$targets = @("Allow once", "Allow for this time", "Allow for this")
+$targets = @("Allow", "Allow once", "Allow for this time", "Allow for this")
 $running = $true
 
 $reader = [System.IO.StreamReader]::new([System.Console]::OpenStandardInput())
 $readTask = $reader.ReadLineAsync()
 
-function CheckButton($hwnd) {
+function FindAllowButton($root) {
+    if (-not $root) { return $null }
     try {
-        $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
-        if (-not $root) { return $null }
-
         $cond = New-Object System.Windows.Automation.PropertyCondition(
             [System.Windows.Automation.AutomationElementIdentifiers]::ControlTypeProperty,
             [System.Windows.Automation.ControlType]::Button)
-
         $buttons = $root.FindAll([System.Windows.Automation.TreeScope]::Subtree, $cond)
         if (-not $buttons -or $buttons.Count -eq 0) { return $null }
-
         for ($i = 0; $i -lt $buttons.Count; $i++) {
             $btn = $buttons[$i]
             if (-not $btn.Current.IsEnabled) { continue }
@@ -44,31 +44,27 @@ function CheckButton($hwnd) {
     return $null
 }
 
-function ClickButton($btn, $hwnd) {
+function ClickButton($btn, $procId) {
     $name = $btn.Current.Name.Trim()
     Write-Output "found: >>$name<<"
-
-    # 1. Try InvokePattern
+    # Try InvokePattern
     try {
         $invoke = [System.Windows.Automation.InvokePattern]::GetPattern($btn)
-        if ($invoke) { $invoke.Invoke(); Write-Output "clicked!"; return $true }
+        if ($invoke) { $invoke.Invoke(); Write-Output "clicked!"; return }
     } catch { }
-
-    # 2. Activate + SendKeys Ctrl+Enter, then restore prev window
+    # Activate + SendKeys
     try {
         $prevHwnd = [IntPtr]::Zero
         try { $prevHwnd = [Win32]::GetForegroundWindow() } catch { }
         $wshell = New-Object -ComObject wscript.shell
-        if ($wshell) { $wshell.AppActivate($proc.Id) | Out-Null }
+        if ($wshell) { $wshell.AppActivate($procId) | Out-Null }
         Start-Sleep -Milliseconds 150
         [System.Windows.Forms.SendKeys]::SendWait("^({ENTER})")
-        if ($prevHwnd -and $prevHwnd -ne [IntPtr]::Zero -and $prevHwnd -ne $hwnd) {
+        if ($prevHwnd -and $prevHwnd -ne [IntPtr]::Zero) {
             try { [Win32]::SetForegroundWindow($prevHwnd) | Out-Null } catch { }
         }
         Write-Output "clicked (SendKeys)!"
-        return $true
     } catch { Write-Output "key error: $_" }
-    return $false
 }
 
 while ($running) {
@@ -78,33 +74,50 @@ while ($running) {
         $readTask = $reader.ReadLineAsync()
     }
 
-    $procs = Get-Process -ErrorAction SilentlyContinue |
+    $claudeProcs = Get-Process -ErrorAction SilentlyContinue |
         Where-Object { $_.ProcessName -match 'claude' } |
         Where-Object { $_.MainWindowHandle -ne 0 }
 
-    if (-not $procs) { Start-Sleep -Milliseconds 300; continue }
+    if (-not $claudeProcs) { Start-Sleep -Milliseconds 500; continue }
 
-    foreach ($proc in $procs) {
-        $hwnd = $proc.MainWindowHandle
-        $wasMinimized = [Win32]::IsIconic($hwnd)
+    $claudePids = @{}
+    foreach ($p in $claudeProcs) { $claudePids[$p.Id] = $p.MainWindowHandle }
 
-        # If minimized, briefly show without activation so UIA can access
-        if ($wasMinimized) {
-            [Win32]::ShowWindow($hwnd, 4) | Out-Null  # SW_SHOWNOACTIVATE
-            Start-Sleep -Milliseconds 200
-        }
-
-        $btn = CheckButton($hwnd)
-
-        if ($btn) {
-            ClickButton $btn $hwnd
-        }
-
-        # If was minimized and no Allow found, minimize back
-        if ($wasMinimized -and -not $btn) {
-            [Win32]::ShowWindow($hwnd, 6) | Out-Null  # SW_MINIMIZE
-        }
+    # 1) Check main Claude windows via UIA (works when not minimized)
+    foreach ($p in $claudeProcs) {
+        if ([Win32]::IsIconic($p.MainWindowHandle)) { continue }
+        try {
+            $root = [System.Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
+            $btn = FindAllowButton $root
+            if ($btn) { ClickButton $btn $p.Id }
+        } catch { }
     }
 
-    if ($wasMinimized) { Start-Sleep -Milliseconds 2500 } else { Start-Sleep -Milliseconds 500 }
+    # 2) Scan all top-level windows for Claude-owned dialogs (works even when minimized)
+    $dialogHwnds = New-Object System.Collections.ArrayList
+    $enumerator = [Win32+EnumWindowsProc]{
+        param($hWnd, $lParam)
+        $title = New-Object System.Text.StringBuilder 256
+        [Win32]::GetWindowText($hWnd, $title, 256) | Out-Null
+        $ownerPid = 0
+        [Win32]::GetWindowThreadProcessId($hWnd, [ref]$ownerPid) | Out-Null
+        if ($claudePids.ContainsKey($ownerPid) -and $claudePids[$ownerPid] -ne $hWnd) {
+            $t = $title.ToString().Trim()
+            if ($t -ne '') { [void]$dialogHwnds.Add($hWnd) }
+        }
+        return $true
+    }
+    [Win32]::EnumWindows($enumerator, [IntPtr]::Zero) | Out-Null
+
+    foreach ($hwnd in $dialogHwnds) {
+        try {
+            $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+            $ownerPid = 0
+            [Win32]::GetWindowThreadProcessId($hwnd, [ref]$ownerPid) | Out-Null
+            $btn = FindAllowButton $root
+            if ($btn) { ClickButton $btn $ownerPid }
+        } catch { }
+    }
+
+    Start-Sleep -Milliseconds 400
 }
