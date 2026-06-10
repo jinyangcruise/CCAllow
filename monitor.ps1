@@ -109,13 +109,16 @@ while ($running) {
 
     # Claude IS minimized
     if ($minimizedPolling) {
-        [Win32]::ShowWindow($hwnd, 4) | Out-Null
-        Start-Sleep -Milliseconds 200
+        Write-Output "  peek start"
+        [Win32]::ShowWindow($hwnd, 9) | Out-Null  # SW_RESTORE (more reliable than SW_SHOWNOACTIVATE)
+        Start-Sleep -Milliseconds 300
+        Write-Output "  checking..."
         try {
             $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
             if ($btn) { ClickButton $btn $p.Id; continue }
         } catch { }
         [Win32]::ShowWindow($hwnd, 6) | Out-Null
+        Write-Output "  peek end"
         Start-Sleep -Milliseconds $peekInterval
     } else {
         Start-Sleep -Milliseconds 1000
