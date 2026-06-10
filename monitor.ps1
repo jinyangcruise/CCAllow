@@ -144,19 +144,18 @@ while ($running) {
         $pw = $savedNormal.Right - $savedNormal.Left
         $ph = $savedNormal.Bottom - $savedNormal.Top
         Write-Output "  savedPos=($($savedNormal.Left),$($savedNormal.Top)) screen=($sw,$sh) win=($pw,$ph)"
+        # Show at bottom-right, size 1x1 (invisible to user, but UIA still works)
         $r = $wp.rcNormalPosition
-        $r.Left = $sw - 1; $r.Top = $sh - 1
-        $r.Right = $sw - 1 + $pw; $r.Bottom = $sh - 1 + $ph
+        $r.Left = $sw - 1; $r.Top = $sh - 1; $r.Right = $sw; $r.Bottom = $sh
         $wp.rcNormalPosition = $r
-        $wp.showCmd = 4
-        Write-Output "  targetPos=($($wp.rcNormalPosition.Left),$($wp.rcNormalPosition.Top))"
+        $wp.showCmd = 8  # SW_SHOWNA (show without activating, no focus steal)
         [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
         Start-Sleep -Milliseconds 300
         # Verify actual position
         $wp2 = New-Object WINDOWPLACEMENT
         $wp2.length = [System.Runtime.InteropServices.Marshal]::SizeOf($wp2)
         [Win32]::GetWindowPlacement($hwnd, [ref]$wp2) | Out-Null
-        Write-Output "  actualPos=($($wp2.rcNormalPosition.Left),$($wp2.rcNormalPosition.Top)) showCmd=$($wp2.showCmd)"
+        Write-Output "  pos=($($wp2.rcNormalPosition.Left),$($wp2.rcNormalPosition.Top)) size=$($wp2.rcNormalPosition.Right - $wp2.rcNormalPosition.Left)x$($wp2.rcNormalPosition.Bottom - $wp2.rcNormalPosition.Top)"
         Write-Output "  checking..."
         try {
             $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
