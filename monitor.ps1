@@ -144,8 +144,10 @@ while ($running) {
         $pw = $savedNormal.Right - $savedNormal.Left
         $ph = $savedNormal.Bottom - $savedNormal.Top
         Write-Output "  savedPos=($($savedNormal.Left),$($savedNormal.Top)) screen=($sw,$sh) win=($pw,$ph)"
-        $wp.rcNormalPosition.Left = $sw - 1; $wp.rcNormalPosition.Top = $sh - 1
-        $wp.rcNormalPosition.Right = $sw - 1 + $pw; $wp.rcNormalPosition.Bottom = $sh - 1 + $ph
+        $r = $wp.rcNormalPosition
+        $r.Left = $sw - 1; $r.Top = $sh - 1
+        $r.Right = $sw - 1 + $pw; $r.Bottom = $sh - 1 + $ph
+        $wp.rcNormalPosition = $r
         $wp.showCmd = 4
         Write-Output "  targetPos=($($wp.rcNormalPosition.Left),$($wp.rcNormalPosition.Top))"
         [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
