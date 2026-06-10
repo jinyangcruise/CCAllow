@@ -16,6 +16,7 @@ public class Win32 {
     [DllImport("user32.dll")] public static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwp);
     [DllImport("user32.dll")] public static extern bool SetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwp);
     [DllImport("user32.dll")] public static extern int GetSystemMetrics(int nIndex);
+    [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, IntPtr attrValue, int attrSize);
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -101,6 +102,19 @@ function ClickButton($btn, $procId) {
     } catch { Write-Output "key error: $_" }
 }
 
+function DisableAnim($hwnd) {
+    $mem = [System.Runtime.InteropServices.Marshal]::AllocHGlobal(4)
+    [System.Runtime.InteropServices.Marshal]::WriteInt32($mem, 0, 1)
+    [Win32]::DwmSetWindowAttribute($hwnd, 3, $mem, 4) | Out-Null  # DWMWA_TRANSITIONS_FORCEDISABLED
+    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($mem)
+}
+function EnableAnim($hwnd) {
+    $mem = [System.Runtime.InteropServices.Marshal]::AllocHGlobal(4)
+    [System.Runtime.InteropServices.Marshal]::WriteInt32($mem, 0, 0)
+    [Win32]::DwmSetWindowAttribute($hwnd, 3, $mem, 4) | Out-Null
+    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($mem)
+}
+
 while ($running) {
     $loopCount++
     if ($loopCount % 10 -eq 0) { Write-Output "alive (loop $loopCount, polling=$minimizedPolling, interval=$peekInterval)" }
@@ -136,6 +150,7 @@ while ($running) {
 
     # Claude IS minimized
     if ($minimizedPolling) {
+        DisableAnim $hwnd
         $wp = New-Object WINDOWPLACEMENT
         $wp.length = [System.Runtime.InteropServices.Marshal]::SizeOf($wp)
         [Win32]::GetWindowPlacement($hwnd, [ref]$wp) | Out-Null
@@ -156,12 +171,14 @@ while ($running) {
         try {
             $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
             if ($btn) {
+                EnableAnim $hwnd
                 $wp.rcNormalPosition = $savedNormal
                 [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
                 ClickButton $btn $p.Id
                 continue
             }
         } catch { Write-Output "  check error: $_" }
+        EnableAnim $hwnd
         $wp.rcNormalPosition = $savedNormal
         $wp.showCmd = 6  # SW_MINIMIZE
         [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
