@@ -83,9 +83,17 @@ function ClickButton($btn, $procId) {
     Write-Output "found: >>$name<<"
     # Try InvokePattern (doesn't steal focus)
     try {
+        $prevHwnd = [IntPtr]::Zero
+        try { $prevHwnd = [Win32]::GetForegroundWindow() } catch { }
         $invoke = $btn.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
-        if ($invoke) { $invoke.Invoke(); Write-Output "clicked (InvokePattern)!"; return }
-        else { Write-Output "  no InvokePattern on '$name'" }
+        if ($invoke) { $invoke.Invoke() }
+        else { Write-Output "  no InvokePattern on '$name'"; throw }
+        # InvokePattern clicked, restore previous window
+        if ($prevHwnd -and $prevHwnd -ne [IntPtr]::Zero) {
+            Start-Sleep -Milliseconds 50
+            try { [Win32]::SetForegroundWindow($prevHwnd) | Out-Null } catch { }
+        }
+        Write-Output "clicked (InvokePattern)!"; return
     } catch { Write-Output "  InvokePattern error: $_" }
     # Fallback: activate + SendKeys
     try {
