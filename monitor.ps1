@@ -12,6 +12,7 @@ public class Win32 {
     [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+    [DllImport("user32.dll")] public static extern int GetClassName(IntPtr hWnd, StringBuilder text, int count);
     [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
     [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr hWnd, EnumWindowsProc lpEnumFunc, IntPtr lParam);
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
@@ -94,28 +95,37 @@ while ($running) {
         } catch { }
     }
 
-    # 2) Scan all top-level + child windows of Claude processes (works when minimized)
+    # 2) Scan ALL top-level windows for Allow-related dialogs (notifications, permission dialogs)
     $dialogHwnds = New-Object System.Collections.ArrayList
     $seenHwnds = @{}
+    $knownPids = @{}; foreach ($p in $claudeProcs) { $knownPids[$p.Id] = $true }
 
     $collector = [Win32+EnumWindowsProc]{
         param($hWnd, $lParam)
+        if ($seenHwnds.ContainsKey($hWnd)) { return $true }
+        $seenHwnds[$hWnd] = $true
+        $title = New-Object System.Text.StringBuilder 256
+        $cls = New-Object System.Text.StringBuilder 64
+        [Win32]::GetWindowText($hWnd, $title, 256) | Out-Null
+        [Win32]::GetClassName($hWnd, $cls, 64) | Out-Null
+        $t = $title.ToString().Trim()
+        $c = $cls.ToString().Trim()
         $ownerPid = 0
         [Win32]::GetWindowThreadProcessId($hWnd, [ref]$ownerPid) | Out-Null
-        if ($claudePids.ContainsKey($ownerPid) -and -not $seenHwnds.ContainsKey($hWnd)) {
-            $title = New-Object System.Text.StringBuilder 256
-            [Win32]::GetWindowText($hWnd, $title, 256) | Out-Null
-            $seenHwnds[$hWnd] = $true
-            Write-Output "  win: hwnd=$hWnd pid=$ownerPid title='$($title.ToString().Trim())'"
+        $isClaude = $knownPids.ContainsKey($ownerPid)
+        # Log Claude-related or Allow-related windows
+        if ($isClaude -or $t -match '(?i)allow|claude|permission' -or $c -eq '#32770') {
+            Write-Output "  win: cls=$c title='$t' pid=$ownerPid claude=$isClaude"
+        }
+        # Collect Claude windows (excluding main) AND any dialog with Allow in title
+        if ($isClaude -or $t -match '(?i)allow' -or $c -eq '#32770') {
             [void]$dialogHwnds.Add($hWnd)
         }
         return $true
     }
-
-    # Enumerate top-level windows
     [Win32]::EnumWindows($collector, [IntPtr]::Zero) | Out-Null
 
-    # Enumerate children of each main window
+    # Also check children of main Claude windows
     foreach ($hwnd in $claudePids.Values) {
         [Win32]::EnumChildWindows($hwnd, $collector, [IntPtr]::Zero) | Out-Null
     }
