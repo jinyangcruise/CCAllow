@@ -92,12 +92,12 @@ function ClickButton($btn, $procId) {
         if ($prevHwnd -and $prevHwnd -ne [IntPtr]::Zero) {
             Start-Sleep -Milliseconds 50
             try {
-                $pid = 0
-                [Win32]::GetWindowThreadProcessId($prevHwnd, [ref]$pid) | Out-Null
-                Write-Output "  focus: prevHwnd=$prevHwnd pid=$pid"
-                if ($pid -gt 0) {
+                $targetPid = 0
+                [Win32]::GetWindowThreadProcessId($prevHwnd, [ref]$targetPid) | Out-Null
+                Write-Output "  focus: prevHwnd=$prevHwnd pid=$targetPid"
+                if ($targetPid -gt 0) {
                     $wshell = New-Object -ComObject wscript.shell
-                    $result = $wshell.AppActivate($pid)
+                    $result = $wshell.AppActivate($targetPid)
                     Write-Output "  focus: AppActivate result=$result"
                 } else { Write-Output "  focus: invalid pid" }
             } catch { Write-Output "  focus error: $_" }
@@ -115,9 +115,9 @@ function ClickButton($btn, $procId) {
         [System.Windows.Forms.SendKeys]::SendWait("^({ENTER})")
         if ($prevHwnd -and $prevHwnd -ne [IntPtr]::Zero) {
             try {
-                $pid = 0
-                [Win32]::GetWindowThreadProcessId($prevHwnd, [ref]$pid) | Out-Null
-                if ($pid -gt 0) { $wshell.AppActivate($pid) | Out-Null }
+                $targetPid = 0
+                [Win32]::GetWindowThreadProcessId($prevHwnd, [ref]$targetPid) | Out-Null
+                if ($targetPid -gt 0) { $wshell.AppActivate($targetPid) | Out-Null }
             } catch { }
         }
         Write-Output "clicked (SendKeys)!"
