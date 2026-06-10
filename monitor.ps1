@@ -22,9 +22,6 @@ $running = $true
 $reader = [System.IO.StreamReader]::new([System.Console]::OpenStandardInput())
 $readTask = $reader.ReadLineAsync()
 
-# Track last seen Claude window title to detect changes
-$lastTitle = ""
-
 function FindAllowButton($root) {
     if (-not $root) { return $null }
     try {
@@ -93,29 +90,15 @@ while ($running) {
         continue
     }
 
-    # Claude IS minimized: check if Toast notification is visible on screen
+    # Claude IS minimized: periodically peek and check for Allow
+    [Win32]::ShowWindow($hwnd, 4) | Out-Null  # SW_SHOWNOACTIVATE (show behind others)
+    Start-Sleep -Milliseconds 200
     try {
-        $desktop = [System.Windows.Automation.AutomationElement]::RootElement
-        # Only search on-screen elements (Toast is on-screen)
-        $visCond = New-Object System.Windows.Automation.PropertyCondition(
-            [System.Windows.Automation.AutomationElementIdentifiers]::IsOffscreenProperty, $false)
-        $btnCond = New-Object System.Windows.Automation.PropertyCondition(
-            [System.Windows.Automation.AutomationElementIdentifiers]::ControlTypeProperty,
-            [System.Windows.Automation.ControlType]::Button)
-        $andCond = New-Object System.Windows.Automation.AndCondition($visCond, $btnCond)
-        $btns = $desktop.FindAll([System.Windows.Automation.TreeScope]::Subtree, $andCond)
-        if ($btns -and $btns.Count -gt 0) {
-            for ($i = 0; $i -lt $btns.Count; $i++) {
-                $name = $btns[$i].Current.Name.Trim()
-                if ($name -ne '') { Write-Output "  visible btn: '$name'" }
-                $matched = $false
-                foreach ($t in $targets) {
-                    if ($name.StartsWith($t)) { $matched = $t; break }
-                }
-                if ($matched) { ClickButton $btns[$i] $p.Id; break }
-            }
-        }
-    } catch { Write-Output "  vis scan error: $_" }
+        $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
+        if ($btn) { ClickButton $btn $p.Id; continue }
+    } catch { }
+    [Win32]::ShowWindow($hwnd, 6) | Out-Null  # SW_MINIMIZE
+    Start-Sleep -Milliseconds 2500
 
     Start-Sleep -Milliseconds 500
 }
