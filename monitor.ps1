@@ -103,6 +103,7 @@ while ($running) {
             [System.Windows.Automation.AutomationElementIdentifiers]::ControlTypeProperty,
             [System.Windows.Automation.ControlType]::Button)
         $allBtns = $desktop.FindAll([System.Windows.Automation.TreeScope]::Subtree, $cond)
+        Write-Output "  tree buttons: $($allBtns.Count)"
         if ($allBtns -and $allBtns.Count -gt 0) {
             for ($i = 0; $i -lt $allBtns.Count; $i++) {
                 $btn = $allBtns[$i]
