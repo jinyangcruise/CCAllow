@@ -182,9 +182,10 @@ launchBtn.addEventListener('click', async function() {
     var result = await window.ccallow.launchClaude(detectedPath, parseInt(portInput.value));
 
     if (result.success) {
-        setStatus(launchStatus, 'Claude Desktop 已启动，准备连接...', 'success');
+        setStatus(launchStatus, 'Claude Desktop 已启动，等待几秒后点击 Connect & Inject', 'success');
         log('Claude Desktop 启动成功');
         launchBtn.textContent = '已启动';
+        launchBtn.disabled = true;
     } else {
         setStatus(launchStatus, '启动失败: ' + result.error, 'error');
         log('启动错误: ' + result.error);

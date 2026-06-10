@@ -165,52 +165,66 @@ ipcMain.handle('select-claude', async () => {
 ipcMain.handle('launch-claude', async (_event, claudePath, port) => {
     if (claudeProcess) return { success: false, error: 'Claude is already running from this launcher' };
 
+    if (!fs.existsSync(claudePath)) {
+        return { success: false, error: `File not found: ${claudePath}` };
+    }
+
     const exeDir = path.dirname(claudePath);
-    const exeName = path.basename(claudePath, '.exe');
-    const isWindowsApp = process.platform === 'win32' && claudePath.includes('WindowsApps');
-    let stderrBuf = '', stdoutBuf = '';
+    const isStoreApp = claudePath.includes('WindowsApps');
 
-    function onStdout(d) { stdoutBuf += d.toString(); if (mainWindow) mainWindow.webContents.send('launch-log', d.toString().trim()); }
-    function onStderr(d) { stderrBuf += d.toString(); if (mainWindow) mainWindow.webContents.send('launch-log', d.toString().trim()); }
+    let attempts = [claudePath];
 
-    try {
-        let proc;
+    // For Store Apps, also try the execution alias
+    if (isStoreApp) {
+        const alias = path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WindowsApps', 'claude.exe');
+        if (fs.existsSync(alias)) attempts.push(alias);
+    }
 
-        if (isWindowsApp) {
-            // WindowsApps: use Start-Process via PowerShell
-            const psCmd = `Start-Process -FilePath '${claudePath.replace(/'/g, "''")}' -ArgumentList '--remote-debugging-port=${port}' -WindowStyle Normal`;
-            const logMsg = `powershell -NoProfile -Command "${psCmd}"`;
-            proc = spawn('powershell', ['-NoProfile', '-Command', psCmd], {
+    for (const exe of attempts) {
+        let stderrBuf = '';
+        let launchOk = false;
+
+        const code = await new Promise((resolve) => {
+            const proc = spawn(exe, [`--remote-debugging-port=${port}`], {
                 cwd: exeDir, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
             });
-            proc.on('error', (err) => { if (mainWindow) mainWindow.webContents.send('launch-error', err.message); });
-            proc.on('exit', () => { claudeProcess = null; });
-            claudeProcess = proc;
-            return { success: true, note: 'Launched via PowerShell Start-Process' };
+            proc.on('error', (err) => { resolve('err:' + err.message); });
+            proc.stdout.on('data', (d) => { if (mainWindow) mainWindow.webContents.send('launch-log', d.toString().trim()); });
+            proc.stderr.on('data', (d) => {
+                stderrBuf += d.toString();
+                if (mainWindow) mainWindow.webContents.send('launch-log', d.toString().trim());
+            });
+            proc.on('exit', (code) => { resolve(code); });
+            // If still running after 800ms, consider it a success
+            setTimeout(() => {
+                if (proc.exitCode === null) {
+                    launchOk = true;
+                    claudeProcess = proc;
+                    resolve(null);
+                }
+            }, 800);
+        });
+
+        if (launchOk) {
+            if (mainWindow) mainWindow.webContents.send('launch-log', `Launched: ${exe}`);
+            return { success: true };
         }
 
-        // Regular install: spawn directly
-        proc = spawn(claudePath, [`--remote-debugging-port=${port}`], {
-            cwd: exeDir, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
-        });
-        proc.on('error', (err) => { claudeProcess = null; if (mainWindow) mainWindow.webContents.send('launch-error', err.message); });
-        proc.stdout.on('data', onStdout);
-        proc.stderr.on('data', onStderr);
-        proc.on('exit', (code) => {
-            claudeProcess = null;
-            if (code !== 0) {
-                let detail = stderrBuf || stdoutBuf || '(no output)';
-                if (mainWindow) mainWindow.webContents.send('launch-log', `--- exit:${code} ---\n${detail.trim()}`);
-            }
-            if (mainWindow) mainWindow.webContents.send('launch-exit', code);
-        });
-        claudeProcess = proc;
-        return { success: true };
+        if (typeof code === 'string' && code.startsWith('err:')) {
+            if (mainWindow) mainWindow.webContents.send('launch-log', `[${path.basename(exe)}] ${code}`);
+            continue;
+        }
 
-    } catch (err) {
-        claudeProcess = null;
-        return { success: false, error: err.message };
+        if (stderrBuf.trim()) {
+            if (mainWindow) mainWindow.webContents.send('launch-log', `[${path.basename(exe)}] exit:${code} stderr:\n${stderrBuf.trim()}`);
+        }
+
+        if (exe === attempts[attempts.length - 1]) {
+            return { success: false, error: `All launch attempts failed (last exit: ${code})` };
+        }
     }
+
+    return { success: false, error: 'Unknown error' };
 });
 
 // ── CDP connect / inject ──
