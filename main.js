@@ -107,10 +107,11 @@ function sendMonitorCmd(cmd) {
 
 function stopMonitor() {
     if (!monitorProcess) return;
+    const oldProc = monitorProcess;
     try {
-        monitorProcess.stdin.write('exit\n');
-        monitorProcess.stdin.end();
-        setTimeout(() => { try { monitorProcess.kill(); } catch {} }, 500);
+        oldProc.stdin.write('exit\n');
+        oldProc.stdin.end();
+        setTimeout(() => { try { oldProc.kill(); } catch {} }, 500);
     } catch {}
     monitorProcess = null;
     monitorEnabled = false;
