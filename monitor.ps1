@@ -14,43 +14,55 @@ while ($running) {
         $readTask = $reader.ReadLineAsync()
     }
 
-    $procs = Get-Process -Name "claude" -ErrorAction SilentlyContinue
+    $procs = Get-Process -ErrorAction SilentlyContinue |
+        Where-Object { $_.ProcessName -match 'claude' } |
+        Where-Object { $_.MainWindowHandle -ne 0 }
+
+    if (-not $procs) {
+        Start-Sleep -Milliseconds 300
+        continue
+    }
+
     foreach ($proc in $procs) {
-        if ($proc.MainWindowHandle -eq 0) { continue }
+        Write-Output "proc: $($proc.ProcessName) hwnd=$($proc.MainWindowHandle)"
         try {
             $root = [System.Windows.Automation.AutomationElement]::FromHandle($proc.MainWindowHandle)
-            if (-not $root) { continue }
+            if (-not $root) { Write-Output "  no UIA root"; continue }
 
-            $cond = New-Object System.Windows.Automation.PropertyCondition(
+            $ctrlCond = New-Object System.Windows.Automation.PropertyCondition(
                 [System.Windows.Automation.AutomationElementIdentifiers]::ControlTypeProperty,
                 [System.Windows.Automation.ControlType]::Button)
 
-            $buttons = $root.FindAll([System.Windows.Automation.TreeScope]::Subtree, $cond)
-            if (-not $buttons -or $buttons.Count -eq 0) { continue }
+            $buttons = $root.FindAll([System.Windows.Automation.TreeScope]::Subtree, $ctrlCond)
+            Write-Output "  buttons found: $($buttons.Count)"
 
             for ($i = 0; $i -lt $buttons.Count; $i++) {
                 $btn = $buttons[$i]
-                if (-not $btn.Current.IsEnabled) { continue }
                 $name = $btn.Current.Name.Trim()
+                $enabled = $btn.Current.IsEnabled
+                Write-Output "  btn[$i]='$name' enabled=$enabled"
+
+                if (-not $enabled) { continue }
                 foreach ($t in $targets) {
                     if ($name -eq $t) {
-                        Write-Output "found: [$name]"
+                        Write-Output "  -> match: $t"
                         try {
                             $invoke = [System.Windows.Automation.InvokePattern]::GetPattern($btn)
-                            if ($invoke) { $invoke.Invoke(); Write-Output "clicked: $t" }
+                            if ($invoke) { $invoke.Invoke(); Write-Output "  -> clicked!"
+                            } else { Write-Output "  -> no InvokePattern" }
                         } catch {
-                            # fallback: try LegacyIAccessible
                             try {
                                 $legacy = [System.Windows.Automation.LegacyIAccessiblePattern]::GetPattern($btn)
-                                if ($legacy) { $legacy.DoDefaultAction(); Write-Output "clicked(legacy): $t" }
-                            } catch { Write-Output "click failed: $t" }
+                                if ($legacy) { $legacy.DoDefaultAction(); Write-Output "  -> clicked(legacy)!" }
+                                else { Write-Output "  -> no LegacyIAccessiblePattern" }
+                            } catch { Write-Output "  -> error: $_" }
                         }
                         break
                     }
                 }
             }
-        } catch { }
+        } catch { Write-Output "  error: $_" }
     }
 
-    Start-Sleep -Milliseconds 300
+    Start-Sleep -Milliseconds 500
 }
