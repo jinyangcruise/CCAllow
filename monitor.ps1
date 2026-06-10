@@ -163,8 +163,16 @@ while ($running) {
         Write-Output "  savedPos=($($wp.rcNormalPosition.Left),$($wp.rcNormalPosition.Top)) screen=($sw,$sh) win=($pw,$ph)"
         # Move while minimized, then show at new position
         $offX = [Math]::Max(0, $sw - 10); $offY = [Math]::Max(0, $sh - 10 - 80)
-        [Win32]::SetWindowPos($hwnd, [IntPtr]::Zero, $offX, $offY, $pw, $ph, 0x0004 -bor 0x0010) | Out-Null  # NOZORDER | NOACTIVATE
-        [Win32]::ShowWindow($hwnd, 4) | Out-Null  # SW_SHOWNOACTIVATE
+        Write-Output "  offPos=($offX, $offY)"
+        # Step 1: update position while still minimized (no clamp because no show)
+        $wp.showCmd = 2  # SW_SHOWMINIMIZED
+        $r = $wp.rcNormalPosition
+        $r.Left = $offX; $r.Top = $offY; $r.Right = $offX + $pw; $r.Bottom = $offY + $ph
+        $wp.rcNormalPosition = $r
+        [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
+        # Step 2: restore at new position
+        $wp.showCmd = 4  # SW_SHOWNOACTIVATE
+        [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
         Start-Sleep -Milliseconds 600
         Write-Output "  checking..."
         try {
