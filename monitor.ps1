@@ -18,9 +18,18 @@ public class Win32 {
 
 $targets = @("Allow", "Allow once", "Allow Once", "Allow for this time", "Allow for this")
 $running = $true
+$peekInterval = 2500
+$minimizedPolling = $false
 
 $reader = [System.IO.StreamReader]::new([System.Console]::OpenStandardInput())
 $readTask = $reader.ReadLineAsync()
+
+function HandleCommand($line) {
+    if ($line -eq "exit") { $running = $false; return }
+    if ($line -match '^interval:(\d+)$') { $peekInterval = [int]$Matches[1]; return }
+    if ($line -eq "polling:on") { $minimizedPolling = $true; return }
+    if ($line -eq "polling:off") { $minimizedPolling = $false; return }
+}
 
 function FindAllowButton($root) {
     if (-not $root) { return $null }
@@ -66,7 +75,8 @@ function ClickButton($btn, $procId) {
 while ($running) {
     if ($readTask.IsCompleted) {
         $line = $readTask.Result.Trim()
-        if ($line -eq "exit") { $running = $false; break }
+        HandleCommand $line
+        if (-not $running) { break }
         $readTask = $reader.ReadLineAsync()
     }
 
@@ -90,16 +100,17 @@ while ($running) {
         continue
     }
 
-    # Claude IS minimized: periodically peek and check for Allow
-    Write-Output "peek..."
-    [Win32]::ShowWindow($hwnd, 4) | Out-Null  # SW_SHOWNOACTIVATE
-    Start-Sleep -Milliseconds 200
-    try {
-        $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
-        if ($btn) { ClickButton $btn $p.Id; continue }
-    } catch { }
-    [Win32]::ShowWindow($hwnd, 6) | Out-Null  # SW_MINIMIZE
-    Start-Sleep -Milliseconds 2500
-
-    Start-Sleep -Milliseconds 500
+    # Claude IS minimized
+    if ($minimizedPolling) {
+        [Win32]::ShowWindow($hwnd, 4) | Out-Null
+        Start-Sleep -Milliseconds 200
+        try {
+            $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
+            if ($btn) { ClickButton $btn $p.Id; continue }
+        } catch { }
+        [Win32]::ShowWindow($hwnd, 6) | Out-Null
+        Start-Sleep -Milliseconds $peekInterval
+    } else {
+        Start-Sleep -Milliseconds 1000
+    }
 }

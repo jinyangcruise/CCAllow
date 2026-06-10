@@ -7,6 +7,10 @@ contextBridge.exposeInMainWorld('ccallow', {
     setAutoStart: (v) => ipcRenderer.invoke('set-auto-start', v),
     getSilentStart: () => ipcRenderer.invoke('get-silent-start'),
     setSilentStart: (v) => ipcRenderer.invoke('set-silent-start', v),
+    getMinimizedPolling: () => ipcRenderer.invoke('get-minimized-polling'),
+    setMinimizedPolling: (v) => ipcRenderer.invoke('set-minimized-polling', v),
+    getMinimizedInterval: () => ipcRenderer.invoke('get-minimized-interval'),
+    setMinimizedInterval: (v) => ipcRenderer.invoke('set-minimized-interval', v),
     onTrayToggle: (cb) => ipcRenderer.on('tray-toggle', () => cb()),
     onMonitorLog: (cb) => ipcRenderer.on('monitor-log', (_e, msg) => cb(msg)),
 });

@@ -38,7 +38,7 @@ function applyAutoStart() {
 
 function createWindow() {
     mainWindow = new BrowserWindow({
-        width: 480, height: 440, resizable: true,
+        width: 480, height: 600, resizable: true,
         icon: iconPath,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
@@ -90,6 +90,17 @@ function startMonitor() {
     monitorProcess.on('exit', () => { monitorProcess = null; monitorEnabled = false; rebuildTrayMenu(); });
     monitorEnabled = true;
     rebuildTrayMenu();
+    // Send config
+    const cfg = getConfig();
+    sendMonitorCmd(cfg.minimizedPolling === true ? 'polling:on' : 'polling:off');
+    const interval = cfg.minimizedInterval || 2500;
+    sendMonitorCmd(`interval:${interval}`);
+}
+
+function sendMonitorCmd(cmd) {
+    if (monitorProcess && monitorProcess.stdin.writable) {
+        try { monitorProcess.stdin.write(cmd + '\n'); } catch {}
+    }
 }
 
 function stopMonitor() {
@@ -131,6 +142,29 @@ ipcMain.handle('get-silent-start', () => {
 ipcMain.handle('set-silent-start', (_e, enabled) => {
     saveConfig({ silentStart: enabled });
     return { enabled };
+});
+
+ipcMain.handle('get-minimized-polling', () => {
+    const cfg = getConfig();
+    return { enabled: cfg.minimizedPolling === true };
+});
+
+ipcMain.handle('set-minimized-polling', (_e, enabled) => {
+    saveConfig({ minimizedPolling: enabled });
+    // Restart monitor to apply change
+    if (monitorEnabled) { stopMonitor(); startMonitor(); }
+    return { enabled };
+});
+
+ipcMain.handle('get-minimized-interval', () => {
+    const cfg = getConfig();
+    return { interval: cfg.minimizedInterval || 2500 };
+});
+
+ipcMain.handle('set-minimized-interval', (_e, interval) => {
+    saveConfig({ minimizedInterval: interval });
+    sendMonitorCmd(`interval:${interval}`);
+    return { interval };
 });
 
 app.isQuitting = false;
