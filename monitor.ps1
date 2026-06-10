@@ -9,7 +9,6 @@ using System.Runtime.InteropServices;
 public class Win32 {
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
-    [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 }
 "@
 
@@ -65,29 +64,16 @@ while ($running) {
                     if ($invoke) { $invoke.Invoke(); Write-Output "clicked!"; continue }
                 } catch { }
 
-                # 2. Try PostMessage Ctrl+Enter directly to Claude (no focus steal)
+                # 2. Save foreground, activate Claude, SendKeys Ctrl+Enter, restore
                 try {
-                    $hwnd = $proc.MainWindowHandle
-                    [Win32]::PostMessage($hwnd, 0x100, [IntPtr]0x11, [IntPtr]::Zero) | Out-Null  # WM_KEYDOWN Ctrl
-                    Start-Sleep -Milliseconds 20
-                    [Win32]::PostMessage($hwnd, 0x100, [IntPtr]0x0D, [IntPtr]::Zero) | Out-Null  # WM_KEYDOWN Enter
-                    Start-Sleep -Milliseconds 20
-                    [Win32]::PostMessage($hwnd, 0x101, [IntPtr]0x0D, [IntPtr]::Zero) | Out-Null  # WM_KEYUP Enter
-                    [Win32]::PostMessage($hwnd, 0x101, [IntPtr]0x11, [IntPtr]::Zero) | Out-Null  # WM_KEYUP Ctrl
-                    Write-Output "clicked (PostMessage)!"
-                    continue
-                } catch { Write-Output "PostMessage error: $_" }
-
-                # 3. Fallback: save foreground, activate Claude, SendKeys, restore
-                try {
-                    $prevHwnd = [Win32]::GetForegroundWindow()
+                    $prevHwnd = [IntPtr]::Zero
+                    try { $prevHwnd = [Win32]::GetForegroundWindow() } catch { }
                     $wshell = New-Object -ComObject wscript.shell
                     $wshell.AppActivate($proc.Id) | Out-Null
                     Start-Sleep -Milliseconds 100
                     [System.Windows.Forms.SendKeys]::SendWait("^({ENTER})")
-                    # Restore previous window
-                    if ($prevHwnd -and $prevHwnd -ne $proc.MainWindowHandle) {
-                        [Win32]::SetForegroundWindow($prevHwnd) | Out-Null
+                    if ($prevHwnd -and $prevHwnd -ne [IntPtr]::Zero -and $prevHwnd -ne $proc.MainWindowHandle) {
+                        try { [Win32]::SetForegroundWindow($prevHwnd) | Out-Null } catch { }
                     }
                     Write-Output "clicked (SendKeys)!"
                 } catch { Write-Output "key error: $_" }
