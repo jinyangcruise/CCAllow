@@ -143,12 +143,18 @@ while ($running) {
         $sw = [Win32]::GetSystemMetrics(0); $sh = [Win32]::GetSystemMetrics(1)
         $pw = $savedNormal.Right - $savedNormal.Left
         $ph = $savedNormal.Bottom - $savedNormal.Top
-        # Restore at screen edge: only 1px of window visible at bottom-right
-        $wp.showCmd = 4  # SW_SHOWNOACTIVATE
+        Write-Output "  savedPos=($($savedNormal.Left),$($savedNormal.Top)) screen=($sw,$sh) win=($pw,$ph)"
         $wp.rcNormalPosition.Left = $sw - 1; $wp.rcNormalPosition.Top = $sh - 1
         $wp.rcNormalPosition.Right = $sw - 1 + $pw; $wp.rcNormalPosition.Bottom = $sh - 1 + $ph
+        $wp.showCmd = 4
+        Write-Output "  targetPos=($($wp.rcNormalPosition.Left),$($wp.rcNormalPosition.Top))"
         [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
         Start-Sleep -Milliseconds 300
+        # Verify actual position
+        $wp2 = New-Object WINDOWPLACEMENT
+        $wp2.length = [System.Runtime.InteropServices.Marshal]::SizeOf($wp2)
+        [Win32]::GetWindowPlacement($hwnd, [ref]$wp2) | Out-Null
+        Write-Output "  actualPos=($($wp2.rcNormalPosition.Left),$($wp2.rcNormalPosition.Top)) showCmd=$($wp2.showCmd)"
         Write-Output "  checking..."
         try {
             $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
