@@ -71,10 +71,13 @@ while ($running) {
                     $prevHwnd = [IntPtr]::Zero
                     try { $prevHwnd = [Win32]::GetForegroundWindow() } catch { }
                     $hwnd = $proc.MainWindowHandle
-                    if ([Win32]::IsIconic($hwnd)) { [Win32]::ShowWindow($hwnd, [Win32]::SW_RESTORE) | Out-Null }
+                    if ($hwnd -ne [IntPtr]::Zero -and [Win32]::IsIconic($hwnd)) {
+                        [Win32]::ShowWindow($hwnd, 9) | Out-Null  # SW_RESTORE
+                        Start-Sleep -Milliseconds 200
+                    }
                     $wshell = New-Object -ComObject wscript.shell
-                    $wshell.AppActivate($proc.Id) | Out-Null
-                    Start-Sleep -Milliseconds 100
+                    if ($wshell) { $wshell.AppActivate($proc.Id) | Out-Null }
+                    Start-Sleep -Milliseconds 150
                     [System.Windows.Forms.SendKeys]::SendWait("^({ENTER})")
                     if ($prevHwnd -and $prevHwnd -ne [IntPtr]::Zero -and $prevHwnd -ne $hwnd) {
                         try { [Win32]::SetForegroundWindow($prevHwnd) | Out-Null } catch { }
