@@ -91,7 +91,14 @@ function ClickButton($btn, $procId) {
         # InvokePattern clicked, restore previous window
         if ($prevHwnd -and $prevHwnd -ne [IntPtr]::Zero) {
             Start-Sleep -Milliseconds 50
-            try { [Win32]::SetForegroundWindow($prevHwnd) | Out-Null } catch { }
+            try {
+                $pid = 0
+                [Win32]::GetWindowThreadProcessId($prevHwnd, [ref]$pid) | Out-Null
+                if ($pid -gt 0) {
+                    $wshell = New-Object -ComObject wscript.shell
+                    $wshell.AppActivate($pid) | Out-Null
+                }
+            } catch { }
         }
         Write-Output "clicked (InvokePattern)!"; return
     } catch { Write-Output "  InvokePattern error: $_" }
@@ -105,7 +112,11 @@ function ClickButton($btn, $procId) {
         Start-Sleep -Milliseconds 150
         [System.Windows.Forms.SendKeys]::SendWait("^({ENTER})")
         if ($prevHwnd -and $prevHwnd -ne [IntPtr]::Zero) {
-            try { [Win32]::SetForegroundWindow($prevHwnd) | Out-Null } catch { }
+            try {
+                $pid = 0
+                [Win32]::GetWindowThreadProcessId($prevHwnd, [ref]$pid) | Out-Null
+                if ($pid -gt 0) { $wshell.AppActivate($pid) | Out-Null }
+            } catch { }
         }
         Write-Output "clicked (SendKeys)!"
     } catch { Write-Output "key error: $_" }
