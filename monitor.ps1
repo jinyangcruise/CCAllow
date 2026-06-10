@@ -98,7 +98,7 @@ while ($running) {
 
     # 2) Periodically dump top-level windows for debugging
     $debugCounter++
-    if ($debugCounter -ge 50) {
+    if ($debugCounter -ge 7) {
         $debugCounter = 0
         $isMin = [Win32]::IsIconic($claudeProcs[0].MainWindowHandle)
         Write-Output "--- top-level windows (minimized=$isMin) ---"
