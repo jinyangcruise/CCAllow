@@ -13,8 +13,30 @@ public class Win32 {
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+    [DllImport("user32.dll")] public static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwp);
+    [DllImport("user32.dll")] public static extern bool SetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwp);
+    [DllImport("user32.dll")] public static extern int GetSystemMetrics(int nIndex);
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct POINT { public int X; public int Y; }
+
+[StructLayout(LayoutKind.Sequential)]
+public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+
+[StructLayout(LayoutKind.Sequential)]
+public struct WINDOWPLACEMENT {
+    public int length;
+    public int flags;
+    public int showCmd;
+    public POINT ptMinPosition;
+    public POINT ptMaxPosition;
+    public RECT rcNormalPosition;
+    public RECT rcDevice;
 }
 "@
+
+$SM_CXSCREEN = 0; $SM_CYSCREEN = 1
 
 $targets = @("Allow once", "Allow Once", "Allow for this time", "Allow for this")
 $running = $true
@@ -114,14 +136,32 @@ while ($running) {
 
     # Claude IS minimized
     if ($minimizedPolling) {
-        [Win32]::ShowWindow($hwnd, 4) | Out-Null  # SW_SHOWNOACTIVATE (don't steal focus)
+        $wp = New-Object WINDOWPLACEMENT
+        $wp.length = [System.Runtime.InteropServices.Marshal]::SizeOf($wp)
+        [Win32]::GetWindowPlacement($hwnd, [ref]$wp) | Out-Null
+        $savedNormal = $wp.rcNormalPosition
+        $sw = [Win32]::GetSystemMetrics(0); $sh = [Win32]::GetSystemMetrics(1)
+        $pw = $savedNormal.Right - $savedNormal.Left
+        $ph = $savedNormal.Bottom - $savedNormal.Top
+        # Restore at screen edge: only 1px of window visible at bottom-right
+        $wp.showCmd = 4  # SW_SHOWNOACTIVATE
+        $wp.rcNormalPosition.Left = $sw - 1; $wp.rcNormalPosition.Top = $sh - 1
+        $wp.rcNormalPosition.Right = $sw - 1 + $pw; $wp.rcNormalPosition.Bottom = $sh - 1 + $ph
+        [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
         Start-Sleep -Milliseconds 300
         Write-Output "  checking..."
         try {
             $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
-            if ($btn) { ClickButton $btn $p.Id; continue }
+            if ($btn) {
+                $wp.rcNormalPosition = $savedNormal
+                [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
+                ClickButton $btn $p.Id
+                continue
+            }
         } catch { }
-        [Win32]::ShowWindow($hwnd, 6) | Out-Null  # SW_MINIMIZE
+        $wp.showCmd = 6  # SW_MINIMIZE
+        $wp.rcNormalPosition = $savedNormal
+        [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
         Start-Sleep -Milliseconds $peekInterval
     } else {
         Start-Sleep -Milliseconds 1000
