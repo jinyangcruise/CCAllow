@@ -2,7 +2,6 @@
 
 通过 Windows UI Automation 自动点击 Claude Desktop 中的 "Allow" / "Allow once" 按钮。
 
-无需 CDP / 调试端口 / 注入脚本，适用于所有版本（包括 Microsoft Store 版）。
 
 ## 原理
 
