@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, nativeImage } = require
 const puppeteer = require('puppeteer-core');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
+const { spawn, exec } = require('child_process');
 const zlib = require('zlib');
 
 let mainWindow;
@@ -176,45 +176,45 @@ ipcMain.handle('launch-claude', async (_event, claudePath, port) => {
     let attempts = [claudePath];
 
     if (isStoreApp) {
-        // Store apps can't be spawned directly (CreateProcess fails).
-        // Must use ShellExecute. Try via PowerShell's Shell.Application COM.
-        const quoted = claudePath.replace(/'/g, "''");
-        const psCmd = `(New-Object -ComObject Shell.Application).ShellExecute('${quoted}', '--remote-debugging-port=${port}', '', 'open', 1)`;
-        if (mainWindow) mainWindow.webContents.send('launch-log', `[ShellExecute] Launching via PowerShell COM...`);
+        // Store apps need ShellExecute (not CreateProcess). Use exec()
+        // which runs via cmd.exe and handles ShellExecute properly.
+        const cmd = `start "" "${claudePath}" --remote-debugging-port=${port}`;
+        if (mainWindow) mainWindow.webContents.send('launch-log', `[exec] ${cmd}`);
 
         try {
-            const proc = spawn('powershell', ['-NoProfile', '-Command', psCmd], {
-                detached: true, stdio: 'ignore',
+            await new Promise((resolve, reject) => {
+                const child = exec(cmd, { cwd: exeDir }, (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                });
+                child.unref();
+                // Wait then check process
+                setTimeout(async () => {
+                    const chk = spawn('tasklist', ['/FI', 'IMAGENAME eq claude.exe', '/NH'], { stdio: ['ignore', 'pipe', 'pipe'] });
+                    let out = '';
+                    chk.stdout.on('data', d => out += d.toString());
+                    chk.on('close', () => {
+                        if (out.toLowerCase().includes('claude.exe')) {
+                            resolve();
+                        } else {
+                            // Also check for claude under different name
+                            const all = spawn('tasklist', ['/NH'], { stdio: ['ignore', 'pipe', 'pipe'] });
+                            let allOut = '';
+                            all.stdout.on('data', d => allOut += d.toString());
+                            all.on('close', () => {
+                                const lines = allOut.split(/\r?\n/).filter(l => l.toLowerCase().includes('claude'));
+                                if (lines.length) { resolve(); }
+                                else { reject(new Error('Claude process not found after launch')); }
+                            });
+                        }
+                    });
+                }, 1500);
             });
-            proc.unref();
-            claudeProcess = proc;
-            // Give it a moment
-            await new Promise(r => setTimeout(r, 1000));
-            // Check if any claude process appeared
-            const check = spawn('tasklist', ['/FI', 'IMAGENAME eq claude.exe', '/NH'], { stdio: ['ignore', 'pipe', 'pipe'] });
-            let out = '';
-            check.stdout.on('data', d => out += d.toString());
-            await new Promise(r => check.on('close', r));
-            if (out.includes('claude.exe')) {
-                if (mainWindow) mainWindow.webContents.send('launch-log', `Launched via ShellExecute`);
-                return { success: true };
-            }
+            if (mainWindow) mainWindow.webContents.send('launch-log', 'Claude Desktop launched successfully');
+            return { success: true };
         } catch (err) {
-            if (mainWindow) mainWindow.webContents.send('launch-log', `[ShellExecute] ${err.message}`);
-        }
-
-        // Fallback: try execution alias
-        const appsDir = path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WindowsApps');
-        for (const name of ['claude.exe', 'Claude.exe']) {
-            const fp = path.join(appsDir, name);
-            if (fs.existsSync(fp) && fp !== claudePath) {
-                attempts.push(fp);
-                break;
-            }
-        }
-
-        if (attempts.length === 1) {
-            return { success: false, error: 'Store app cannot be spawned directly. Try the non-Store version from claude.ai/download' };
+            if (mainWindow) mainWindow.webContents.send('launch-log', `[exec] ${err.message}`);
+            return { success: false, error: err.message };
         }
     }
 
