@@ -114,7 +114,6 @@ while ($running) {
         } catch { Write-Output "  (enum error: $_)" }
         Write-Output "--- end ---"
     }
-    }
 
     Start-Sleep -Milliseconds 400
 }
