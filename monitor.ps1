@@ -161,14 +161,19 @@ while ($running) {
         $pw = $wp.rcNormalPosition.Right - $wp.rcNormalPosition.Left
         $ph = $wp.rcNormalPosition.Bottom - $wp.rcNormalPosition.Top
         Write-Output "  savedPos=($($wp.rcNormalPosition.Left),$($wp.rcNormalPosition.Top)) screen=($sw,$sh) win=($pw,$ph)"
-        # One-shot: set position+size to 100x100 at bottom-right, then show
-        $offX = [Math]::Max(0, $sw - 100); $offY = [Math]::Max(0, $sh - 100 - 80)
+        # One-shot: set position to near bottom-right, keep original size
+        $offX = [Math]::Max(0, $sw - 10); $offY = [Math]::Max(0, $sh - 10 - 80)
         $r = $wp.rcNormalPosition
-        $r.Left = $offX; $r.Top = $offY; $r.Right = $offX + 100; $r.Bottom = $offY + 100
+        $r.Left = $offX; $r.Top = $offY; $r.Right = $offX + $pw; $r.Bottom = $offY + $ph
         $wp.rcNormalPosition = $r
         $wp.showCmd = 4  # SW_SHOWNOACTIVATE
         [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
-        Write-Output "  pos=($offX,$offY) 100x100"
+        Write-Output "  pos=($offX,$offY) size=($pw,$ph)"
+        # Verify actual position
+        $wp2 = New-Object WINDOWPLACEMENT
+        $wp2.length = [System.Runtime.InteropServices.Marshal]::SizeOf($wp2)
+        [Win32]::GetWindowPlacement($hwnd, [ref]$wp2) | Out-Null
+        Write-Output "  actual=($($wp2.rcNormalPosition.Left),$($wp2.rcNormalPosition.Top)) size=$($wp2.rcNormalPosition.Right - $wp2.rcNormalPosition.Left)x$($wp2.rcNormalPosition.Bottom - $wp2.rcNormalPosition.Top)"
         [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
         Start-Sleep -Milliseconds 600
         Write-Output "  checking..."
