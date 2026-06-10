@@ -58,6 +58,7 @@ function createTray() {
 }
 
 function rebuildTrayMenu() {
+    if (!tray) return;
     const tmpl = [
         { label: 'Show CCAAllow', click: () => { mainWindow.show(); mainWindow.focus(); } },
         { type: 'separator' },
