@@ -149,7 +149,14 @@ window.ccallow.detectClaude().then(function(r) {
     if (r.path) {
         detectedPath = r.path;
         claudePathInput.value = r.path;
-        setStatus(launchStatus, '已检测到 Claude Desktop', 'success');
+        if (r.isStoreApp) {
+            setStatus(launchStatus, '检测到 Store 版 — CDP 调试不支持 Store 版，请安装非 Store 版', 'error');
+            log('[警告] Store 版不支持 --remote-debugging-port，启动功能将不可用');
+            log('请从 https://claude.ai/download 下载安装非 Store 版本');
+            launchBtn.disabled = true;
+        } else {
+            setStatus(launchStatus, '已检测到 Claude Desktop', 'success');
+        }
         log('自动检测到 Claude: ' + r.path);
     } else {
         claudePathInput.value = '';

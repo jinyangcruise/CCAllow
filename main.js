@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, nativeImage } = require
 const puppeteer = require('puppeteer-core');
 const path = require('path');
 const fs = require('fs');
-const { spawn, exec } = require('child_process');
+const { spawn } = require('child_process');
 const zlib = require('zlib');
 
 let mainWindow;
@@ -150,7 +150,13 @@ function detectClaudePath() {
     return null;
 }
 
-ipcMain.handle('detect-claude', async () => ({ path: detectClaudePath() }));
+ipcMain.handle('detect-claude', async () => {
+    const p = detectClaudePath();
+    return {
+        path: p,
+        isStoreApp: p ? p.includes('WindowsApps') : false,
+    };
+});
 
 ipcMain.handle('select-claude', async () => {
     const filters = process.platform === 'win32'
@@ -172,97 +178,47 @@ ipcMain.handle('launch-claude', async (_event, claudePath, port) => {
     const exeDir = path.dirname(claudePath);
     const isStoreApp = claudePath.includes('WindowsApps');
 
-    // Build list of paths to try
-    let attempts = [claudePath];
-
     if (isStoreApp) {
-        // Store apps need ShellExecute (not CreateProcess). Use exec()
-        // which runs via cmd.exe and handles ShellExecute properly.
-        const cmd = `start "" "${claudePath}" --remote-debugging-port=${port}`;
-        if (mainWindow) mainWindow.webContents.send('launch-log', `[exec] ${cmd}`);
-
-        try {
-            await new Promise((resolve, reject) => {
-                const child = exec(cmd, { cwd: exeDir }, (err) => {
-                    if (err) reject(err);
-                    else resolve();
-                });
-                child.unref();
-                // Wait then check process
-                setTimeout(async () => {
-                    const chk = spawn('tasklist', ['/FI', 'IMAGENAME eq claude.exe', '/NH'], { stdio: ['ignore', 'pipe', 'pipe'] });
-                    let out = '';
-                    chk.stdout.on('data', d => out += d.toString());
-                    chk.on('close', () => {
-                        if (out.toLowerCase().includes('claude.exe')) {
-                            resolve();
-                        } else {
-                            // Also check for claude under different name
-                            const all = spawn('tasklist', ['/NH'], { stdio: ['ignore', 'pipe', 'pipe'] });
-                            let allOut = '';
-                            all.stdout.on('data', d => allOut += d.toString());
-                            all.on('close', () => {
-                                const lines = allOut.split(/\r?\n/).filter(l => l.toLowerCase().includes('claude'));
-                                if (lines.length) { resolve(); }
-                                else { reject(new Error('Claude process not found after launch')); }
-                            });
-                        }
-                    });
-                }, 1500);
-            });
-            if (mainWindow) mainWindow.webContents.send('launch-log', 'Claude Desktop launched successfully');
-            return { success: true };
-        } catch (err) {
-            if (mainWindow) mainWindow.webContents.send('launch-log', `[exec] ${err.message}`);
-            return { success: false, error: err.message };
-        }
+        return { success: false, error: 'Store version does not support --remote-debugging-port. Install non-Store version from https://claude.ai/download' };
     }
 
-    for (const exe of attempts) {
-        let stderrBuf = '';
-        let launchOk = false;
+    let stderrBuf = '';
+    let launchOk = false;
 
-        const code = await new Promise((resolve) => {
-            const proc = spawn(exe, [`--remote-debugging-port=${port}`], {
-                cwd: exeDir, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
-            });
-            proc.on('error', (err) => { resolve('err:' + err.message); });
-            proc.stdout.on('data', (d) => { if (mainWindow) mainWindow.webContents.send('launch-log', d.toString().trim()); });
-            proc.stderr.on('data', (d) => {
-                stderrBuf += d.toString();
-                if (mainWindow) mainWindow.webContents.send('launch-log', d.toString().trim());
-            });
-            proc.on('exit', (code) => { resolve(code); });
-            // If still running after 800ms, consider it a success
-            setTimeout(() => {
-                if (proc.exitCode === null) {
-                    launchOk = true;
-                    claudeProcess = proc;
-                    resolve(null);
-                }
-            }, 800);
+    const code = await new Promise((resolve) => {
+        const proc = spawn(claudePath, [`--remote-debugging-port=${port}`], {
+            cwd: exeDir, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
         });
+        proc.on('error', (err) => { resolve('err:' + err.message); });
+        proc.stdout.on('data', (d) => { if (mainWindow) mainWindow.webContents.send('launch-log', d.toString().trim()); });
+        proc.stderr.on('data', (d) => {
+            stderrBuf += d.toString();
+            if (mainWindow) mainWindow.webContents.send('launch-log', d.toString().trim());
+        });
+        proc.on('exit', (code) => { resolve(code); });
+        setTimeout(() => {
+            if (proc.exitCode === null) {
+                launchOk = true;
+                claudeProcess = proc;
+                resolve(null);
+            }
+        }, 800);
+    });
 
-        if (launchOk) {
-            if (mainWindow) mainWindow.webContents.send('launch-log', `Launched: ${exe}`);
-            return { success: true };
-        }
-
-        if (typeof code === 'string' && code.startsWith('err:')) {
-            if (mainWindow) mainWindow.webContents.send('launch-log', `[${path.basename(exe)}] ${code}`);
-            continue;
-        }
-
-        if (stderrBuf.trim()) {
-            if (mainWindow) mainWindow.webContents.send('launch-log', `[${path.basename(exe)}] exit:${code} stderr:\n${stderrBuf.trim()}`);
-        }
-
-        if (exe === attempts[attempts.length - 1]) {
-            return { success: false, error: `All launch attempts failed (last exit: ${code})` };
-        }
+    if (launchOk) {
+        if (mainWindow) mainWindow.webContents.send('launch-log', `Launched: ${claudePath}`);
+        return { success: true };
     }
 
-    return { success: false, error: 'Unknown error' };
+    if (typeof code === 'string' && code.startsWith('err:')) {
+        return { success: false, error: code.slice(4) };
+    }
+
+    if (stderrBuf.trim()) {
+        if (mainWindow) mainWindow.webContents.send('launch-log', `exit:${code} stderr:\n${stderrBuf.trim()}`);
+    }
+
+    return { success: false, error: `Claude exited with code ${code}` };
 });
 
 // ── CDP connect / inject ──
