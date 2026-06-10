@@ -38,7 +38,7 @@ function applyAutoStart() {
 
 function createWindow() {
     mainWindow = new BrowserWindow({
-        width: 480, height: 340, resizable: true,
+        width: 480, height: 440, resizable: true,
         icon: iconPath,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
