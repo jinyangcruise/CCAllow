@@ -13,6 +13,7 @@ public class Win32 {
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
     [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+    [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr hWnd, EnumWindowsProc lpEnumFunc, IntPtr lParam);
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 }
@@ -93,21 +94,31 @@ while ($running) {
         } catch { }
     }
 
-    # 2) Scan all top-level windows for Claude-owned dialogs (works even when minimized)
+    # 2) Scan all top-level + child windows of Claude processes (works when minimized)
     $dialogHwnds = New-Object System.Collections.ArrayList
-    $enumerator = [Win32+EnumWindowsProc]{
+    $seenHwnds = @{}
+
+    $collector = [Win32+EnumWindowsProc]{
         param($hWnd, $lParam)
-        $title = New-Object System.Text.StringBuilder 256
-        [Win32]::GetWindowText($hWnd, $title, 256) | Out-Null
         $ownerPid = 0
         [Win32]::GetWindowThreadProcessId($hWnd, [ref]$ownerPid) | Out-Null
-        if ($claudePids.ContainsKey($ownerPid) -and $claudePids[$ownerPid] -ne $hWnd) {
-            $t = $title.ToString().Trim()
-            if ($t -ne '') { [void]$dialogHwnds.Add($hWnd) }
+        if ($claudePids.ContainsKey($ownerPid) -and -not $seenHwnds.ContainsKey($hWnd)) {
+            $title = New-Object System.Text.StringBuilder 256
+            [Win32]::GetWindowText($hWnd, $title, 256) | Out-Null
+            $seenHwnds[$hWnd] = $true
+            Write-Output "  win: hwnd=$hWnd pid=$ownerPid title='$($title.ToString().Trim())'"
+            [void]$dialogHwnds.Add($hWnd)
         }
         return $true
     }
-    [Win32]::EnumWindows($enumerator, [IntPtr]::Zero) | Out-Null
+
+    # Enumerate top-level windows
+    [Win32]::EnumWindows($collector, [IntPtr]::Zero) | Out-Null
+
+    # Enumerate children of each main window
+    foreach ($hwnd in $claudePids.Values) {
+        [Win32]::EnumChildWindows($hwnd, $collector, [IntPtr]::Zero) | Out-Null
+    }
 
     foreach ($hwnd in $dialogHwnds) {
         try {
