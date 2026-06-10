@@ -1,7 +1,7 @@
 {
   "name": "ccallow",
   "version": "1.0.0",
-  "description": "Auto-allow permissions for Claude Desktop via CDP",
+  "description": "Auto-click Allow buttons for Claude Desktop via UI Automation",
   "main": "main.js",
   "author": "jinyangcruise",
   "license": "MIT",
@@ -19,7 +19,7 @@
       "main.js",
       "preload.js",
       "index.html",
-      "inject.js",
+      "monitor.ps1",
       "package.json"
     ],
     "win": {
@@ -36,9 +36,6 @@
       "allowToChangeInstallationDirectory": true,
       "installerSidebar": null
     }
-  },
-  "dependencies": {
-    "puppeteer-core": "^23.0.0"
   },
   "devDependencies": {
     "electron": "^33.0.0",

@@ -1,17 +1,15 @@
-const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, nativeImage } = require('electron');
-const puppeteer = require('puppeteer-core');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron');
+const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
 const zlib = require('zlib');
 
 let mainWindow;
 let tray;
-let cdpBrowser = null;
-let claudeProcess = null;
-let isConnected = false;
+let monitorProcess = null;
+let monitorEnabled = false;
 
-// ── generate a 16×16 purple circle PNG in memory ──
+// ── generate tray icon ──
 function makeTrayIcon() {
     const S = 16, R = 79, G = 70, B = 229;
     const raw = Buffer.alloc(S * (S * 3 + 1));
@@ -25,43 +23,21 @@ function makeTrayIcon() {
         }
     }
     const deflated = zlib.deflateSync(raw);
-
     const crcTable = new Uint32Array(256);
     for (let i = 0; i < 256; i++) {
         let c = i;
         for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
         crcTable[i] = c;
     }
-
-    function pngCrc(data) {
-        let c = 0xFFFFFFFF >>> 0;
-        for (let i = 0; i < data.length; i++) c = (crcTable[(c ^ data[i]) & 0xFF] ^ (c >>> 8)) >>> 0;
-        return (c ^ 0xFFFFFFFF) >>> 0;
-    }
-
-    function pngChunk(type, data) {
-        const t = Buffer.from(type, 'ascii');
-        const len = Buffer.alloc(4); len.writeUInt32BE(data.length, 0);
-        const crc = Buffer.alloc(4); crc.writeUInt32BE(pngCrc(Buffer.concat([t, data])), 0);
-        return Buffer.concat([len, t, data, crc]);
-    }
-
-    const ihdr = Buffer.alloc(13);
-    ihdr.writeUInt32BE(S, 0); ihdr.writeUInt32BE(S, 4);
-    ihdr[8] = 8; ihdr[9] = 2;
-
-    return nativeImage.createFromBuffer(Buffer.concat([
-        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-        pngChunk('IHDR', ihdr),
-        pngChunk('IDAT', deflated),
-        pngChunk('IEND', Buffer.alloc(0)),
-    ]));
+    function pngCrc(d) { let c = 0xFFFFFFFF >>> 0; for (let i = 0; i < d.length; i++) c = (crcTable[(c ^ d[i]) & 0xFF] ^ (c >>> 8)) >>> 0; return (c ^ 0xFFFFFFFF) >>> 0; }
+    function pngChunk(typ, data) { const t = Buffer.from(typ, 'ascii'); const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const crc = Buffer.alloc(4); crc.writeUInt32BE(pngCrc(Buffer.concat([t, data]))); return Buffer.concat([len, t, data, crc]); }
+    const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(S, 0); ihdr.writeUInt32BE(S, 4); ihdr[8] = 8; ihdr[9] = 2;
+    return nativeImage.createFromBuffer(Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]), pngChunk('IHDR', ihdr), pngChunk('IDAT', deflated), pngChunk('IEND', Buffer.alloc(0))]));
 }
 
-// ── window ──
 function createWindow() {
     mainWindow = new BrowserWindow({
-        width: 540, height: 520, resizable: false,
+        width: 480, height: 320, resizable: false,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true, nodeIntegration: false,
@@ -69,195 +45,65 @@ function createWindow() {
     });
     mainWindow.loadFile('index.html');
     mainWindow.setMenu(null);
-    mainWindow.on('close', (e) => {
-        if (!app.isQuitting) { e.preventDefault(); mainWindow.hide(); }
-    });
+    mainWindow.on('close', (e) => { if (!app.isQuitting) { e.preventDefault(); mainWindow.hide(); } });
 }
 
-// ── tray ──
 function createTray() {
     tray = new Tray(makeTrayIcon());
     tray.setToolTip('CCAllow');
     rebuildTrayMenu();
-    tray.on('click', () => {
-        if (mainWindow.isVisible()) { mainWindow.focus(); }
-        else { mainWindow.show(); mainWindow.focus(); }
-    });
+    tray.on('click', () => { mainWindow.isVisible() ? mainWindow.focus() : (mainWindow.show(), mainWindow.focus()); });
 }
 
 function rebuildTrayMenu() {
     const tmpl = [
-        { label: 'Show CCAllow', click: () => { mainWindow.show(); mainWindow.focus(); } },
+        { label: 'Show CCAAllow', click: () => { mainWindow.show(); mainWindow.focus(); } },
         { type: 'separator' },
-        isConnected
-            ? { label: 'Disconnect', click: () => mainWindow.webContents.send('tray-disconnect') }
-            : { label: 'Connect & Inject', click: () => mainWindow.webContents.send('tray-connect') },
+        monitorEnabled
+            ? { label: 'Stop Monitoring', click: () => mainWindow.webContents.send('tray-toggle') }
+            : { label: 'Start Monitoring', click: () => mainWindow.webContents.send('tray-toggle') },
         { type: 'separator' },
         { label: 'Exit', click: () => { app.isQuitting = true; app.quit(); } },
     ];
     tray.setContextMenu(Menu.buildFromTemplate(tmpl));
 }
 
-ipcMain.handle('get-version', () => require('./package.json').version);
+function startMonitor() {
+    if (monitorProcess) return;
+    const psPath = path.join(__dirname, 'monitor.ps1');
+    if (!fs.existsSync(psPath)) { return; }
 
-// swap connect state from renderer
-ipcMain.handle('set-connected', (_e, v) => { isConnected = v; rebuildTrayMenu(); return true; });
+    monitorProcess = spawn('powershell', [
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', psPath,
+    ], { stdio: ['pipe', 'pipe', 'pipe'] });
 
-// ── Claude detection / selection / launch ──
-function detectClaudePath() {
-    if (process.platform === 'win32') {
-        const localAppData = process.env.LOCALAPPDATA || '';
-        const progFiles = process.env.ProgramFiles || '';
-        const progFilesX86 = process.env['ProgramFiles(x86)'] || '';
-
-        const candidates = [
-            path.join(localAppData, 'Programs', 'Claude', 'Claude.exe'),
-            path.join(localAppData, 'Claude', 'Claude.exe'),
-            path.join(progFiles, 'Claude', 'Claude.exe'),
-            path.join(progFilesX86, 'Claude', 'Claude.exe'),
-            path.join(localAppData, 'Microsoft', 'WindowsApps', 'claude.exe'),
-            path.join(localAppData, 'Programs', 'claude', 'Claude.exe'),
-            path.join(localAppData, 'claude', 'Claude.exe'),
-        ];
-
-        for (const p of candidates) {
-            try { if (fs.existsSync(p)) return p; } catch {}
-        }
-
-        const winApps = path.join(progFiles, 'WindowsApps');
-        try {
-            if (fs.existsSync(winApps)) {
-                const entries = fs.readdirSync(winApps, { withFileTypes: true });
-                for (const entry of entries) {
-                    if (!entry.isDirectory() || !entry.name.startsWith('Claude_')) continue;
-                    const fp = path.join(winApps, entry.name, 'app', 'claude.exe');
-                    try { if (fs.existsSync(fp)) return fp; } catch {}
-                }
-            }
-        } catch {}
-        return null;
-    }
-
-    if (process.platform === 'darwin') {
-        const p = '/Applications/Claude.app/Contents/MacOS/Claude';
-        try { if (fs.existsSync(p)) return p; } catch {}
-        return null;
-    }
-
-    for (const p of ['/usr/bin/claude', '/usr/local/bin/claude']) {
-        try { if (fs.existsSync(p)) return p; } catch {}
-    }
-    return null;
+    monitorProcess.on('error', () => { monitorProcess = null; monitorEnabled = false; rebuildTrayMenu(); });
+    monitorProcess.on('exit', () => { monitorProcess = null; monitorEnabled = false; rebuildTrayMenu(); });
+    monitorEnabled = true;
+    rebuildTrayMenu();
 }
 
-ipcMain.handle('detect-claude', async () => {
-    const p = detectClaudePath();
-    return {
-        path: p,
-        isStoreApp: p ? p.includes('WindowsApps') : false,
-    };
-});
-
-ipcMain.handle('select-claude', async () => {
-    const filters = process.platform === 'win32'
-        ? [{ name: 'Executable', extensions: ['exe'] }]
-        : process.platform === 'darwin'
-            ? [{ name: 'Application', extensions: ['app'] }]
-            : [];
-    const result = await dialog.showOpenDialog(mainWindow, { title: '选择 Claude Desktop', properties: ['openFile'], filters });
-    return { path: (result.canceled || !result.filePaths.length) ? null : result.filePaths[0] };
-});
-
-ipcMain.handle('launch-claude', async (_event, claudePath, port) => {
-    if (claudeProcess) return { success: false, error: 'Claude is already running from this launcher' };
-
-    if (!fs.existsSync(claudePath)) {
-        return { success: false, error: `File not found: ${claudePath}` };
-    }
-
-    const exeDir = path.dirname(claudePath);
-    const isStoreApp = claudePath.includes('WindowsApps');
-
-    if (isStoreApp) {
-        return { success: false, error: 'Store 版不支持 --remote-debugging-port 参数。你可以手动启动 Claude 后点击 Connect & Inject 尝试连接。' };
-    }
-
-    let stderrBuf = '';
-    let launchOk = false;
-
-    const code = await new Promise((resolve) => {
-        const proc = spawn(claudePath, [`--remote-debugging-port=${port}`], {
-            cwd: exeDir, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
-        });
-        proc.on('error', (err) => { resolve('err:' + err.message); });
-        proc.stdout.on('data', (d) => { if (mainWindow) mainWindow.webContents.send('launch-log', d.toString().trim()); });
-        proc.stderr.on('data', (d) => {
-            stderrBuf += d.toString();
-            if (mainWindow) mainWindow.webContents.send('launch-log', d.toString().trim());
-        });
-        proc.on('exit', (code) => { resolve(code); });
-        setTimeout(() => {
-            if (proc.exitCode === null) {
-                launchOk = true;
-                claudeProcess = proc;
-                resolve(null);
-            }
-        }, 800);
-    });
-
-    if (launchOk) {
-        if (mainWindow) mainWindow.webContents.send('launch-log', `Launched: ${claudePath}`);
-        return { success: true };
-    }
-
-    if (typeof code === 'string' && code.startsWith('err:')) {
-        return { success: false, error: code.slice(4) };
-    }
-
-    if (stderrBuf.trim()) {
-        if (mainWindow) mainWindow.webContents.send('launch-log', `exit:${code} stderr:\n${stderrBuf.trim()}`);
-    }
-
-    return { success: false, error: `Claude exited with code ${code}` };
-});
-
-// ── CDP connect / inject ──
-ipcMain.handle('connect', async (_event, port) => {
+function stopMonitor() {
+    if (!monitorProcess) return;
     try {
-        const browserURL = `http://127.0.0.1:${port}`;
-        cdpBrowser = await puppeteer.connect({ browserURL, defaultViewport: null });
-        const pages = await cdpBrowser.pages();
-        let targetPages = pages.filter(p => { const u = p.url().toLowerCase(); return u.includes('claude') || u.includes('claude.ai'); });
-        if (!targetPages.length) targetPages = pages.filter(p => { const u = p.url(); return u && u !== 'about:blank' && !u.startsWith('devtools://') && !u.startsWith('chrome-extension://'); });
-        if (!targetPages.length) { await cdpBrowser.disconnect(); cdpBrowser = null; return { success: false, error: 'No renderer page found' }; }
-
-        const injectCode = fs.readFileSync(path.join(__dirname, 'inject.js'), 'utf-8');
-        for (const page of targetPages) { try { await page.evaluate(injectCode); } catch (e) { return { success: false, error: 'Inject failed: ' + e.message }; } }
-
-        isConnected = true;
-        rebuildTrayMenu();
-        return { success: true, pages: targetPages.length };
-    } catch (err) {
-        if (cdpBrowser) { try { await cdpBrowser.disconnect(); } catch {} cdpBrowser = null; }
-        return { success: false, error: err.message };
-    }
-});
-
-ipcMain.handle('disconnect', async () => {
-    if (cdpBrowser) { try { await cdpBrowser.disconnect(); } catch {} cdpBrowser = null; }
-    isConnected = false;
+        monitorProcess.stdin.write('exit\n');
+        monitorProcess.stdin.end();
+        setTimeout(() => { try { monitorProcess.kill(); } catch {} }, 500);
+    } catch {}
+    monitorProcess = null;
+    monitorEnabled = false;
     rebuildTrayMenu();
-    return { success: true };
+}
+
+ipcMain.handle('toggle-monitor', () => {
+    if (monitorEnabled) stopMonitor();
+    else startMonitor();
+    return { enabled: monitorEnabled };
 });
 
-// ── lifecycle ──
+ipcMain.handle('get-status', () => ({ enabled: monitorEnabled }));
+
 app.isQuitting = false;
-
-app.on('before-quit', () => { app.isQuitting = true;
-    if (cdpBrowser) { try { cdpBrowser.disconnect(); } catch {} }
-    if (claudeProcess) { try { claudeProcess.kill(); } catch {} claudeProcess = null; }
-});
-
+app.on('before-quit', () => { app.isQuitting = true; stopMonitor(); });
 app.whenReady().then(() => { createWindow(); createTray(); });
-
 app.on('window-all-closed', () => {});
