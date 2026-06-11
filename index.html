@@ -82,6 +82,10 @@ h1{font-size:20px;color:#fff}
             <span class="val" id="intervalVal">2.5s</span>
         </div>
         <div class="hint">间隔越短响应越快，但窗口闪现更频繁。建议 2–3 秒。</div>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
+            <input type="checkbox" id="minAfterAllow" style="width:14px;height:14px;accent-color:#4f46e5;cursor:pointer">
+            <label for="minAfterAllow" style="font-size:12px;color:#94a3b8;cursor:pointer">Allow 后自动最小化窗口</label>
+        </div>
     </div>
 </div>
 
@@ -168,6 +172,10 @@ window.ccallow.getSilentStart().then(function(state) {
     silentStartEl.checked = state.enabled;
 });
 
+window.ccallow.getMinimizeAfterAllow().then(function(state) {
+    document.getElementById('minAfterAllow').checked = state.enabled;
+});
+
 window.ccallow.onMonitorLog(function(msg) {
     log(msg);
 });
@@ -196,6 +204,11 @@ intervalRange.addEventListener('input', async function() {
     var val = parseInt(intervalRange.value);
     intervalVal.textContent = formatInterval(val);
     await window.ccallow.setMinimizedInterval(val);
+});
+
+document.getElementById('minAfterAllow').addEventListener('change', async function() {
+    var result = await window.ccallow.setMinimizeAfterAllow(this.checked);
+    log(result.enabled ? 'Allow 后自动最小化已开启' : 'Allow 后自动最小化已关闭');
 });
 
 // --- Tray toggle ---

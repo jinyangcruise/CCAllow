@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('ccallow', {
     setMinimizedPolling: (v) => ipcRenderer.invoke('set-minimized-polling', v),
     getMinimizedInterval: () => ipcRenderer.invoke('get-minimized-interval'),
     setMinimizedInterval: (v) => ipcRenderer.invoke('set-minimized-interval', v),
+    getMinimizeAfterAllow: () => ipcRenderer.invoke('get-minimize-after-allow'),
+    setMinimizeAfterAllow: (v) => ipcRenderer.invoke('set-minimize-after-allow', v),
     onTrayToggle: (cb) => ipcRenderer.on('tray-toggle', () => cb()),
     onMonitorLog: (cb) => ipcRenderer.on('monitor-log', (_e, msg) => cb(msg)),
 });

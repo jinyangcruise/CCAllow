@@ -44,6 +44,7 @@ $targets = @("Allow once", "Allow Once", "Allow for this time", "Allow for this"
 $running = $true
 $peekInterval = 2500
 $minimizedPolling = $false
+$minimizeAfterAllow = $false
 $loopCount = 0
 
 $reader = [System.IO.StreamReader]::new([System.Console]::OpenStandardInput())
@@ -56,6 +57,8 @@ function HandleCommand($line) {
     if ($line -match '^interval:(\d+)$') { $script:peekInterval = [int]$Matches[1]; return }
     if ($line -eq "polling:on") { $script:minimizedPolling = $true; return }
     if ($line -eq "polling:off") { $script:minimizedPolling = $false; return }
+    if ($line -eq "minimize-after-allow:on") { $script:minimizeAfterAllow = $true; return }
+    if ($line -eq "minimize-after-allow:off") { $script:minimizeAfterAllow = $false; return }
 }
 
 function FindAllowButton($root) {
@@ -183,9 +186,13 @@ while ($running) {
             $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
             if ($btn) {
                 EnableAnim $hwnd
-                $savedWp.showCmd = 4  # SW_SHOWNOACTIVATE (keep visible at original pos)
+                $savedWp.showCmd = 4
                 [Win32]::SetWindowPlacement($hwnd, [ref]$savedWp) | Out-Null
                 ClickButton $btn $p.Id
+                if ($script:minimizeAfterAllow) {
+                    $savedWp.showCmd = 6  # SW_MINIMIZE
+                    [Win32]::SetWindowPlacement($hwnd, [ref]$savedWp) | Out-Null
+                }
                 continue
             }
         } catch { Write-Output "  check error: $_" }

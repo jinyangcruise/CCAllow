@@ -97,6 +97,7 @@ function startMonitor() {
     sendMonitorCmd(cfg.minimizedPolling === true ? 'polling:on' : 'polling:off');
     const interval = cfg.minimizedInterval || 2500;
     sendMonitorCmd(`interval:${interval}`);
+    sendMonitorCmd(cfg.minimizeAfterAllow === true ? 'minimize-after-allow:on' : 'minimize-after-allow:off');
 }
 
 function sendMonitorCmd(cmd) {
@@ -154,8 +155,18 @@ ipcMain.handle('get-minimized-polling', () => {
 
 ipcMain.handle('set-minimized-polling', (_e, enabled) => {
     saveConfig({ minimizedPolling: enabled });
-    // Restart monitor to apply change
     if (monitorEnabled) { stopMonitor(); startMonitor(); }
+    return { enabled };
+});
+
+ipcMain.handle('get-minimize-after-allow', () => {
+    const cfg = getConfig();
+    return { enabled: cfg.minimizeAfterAllow === true };
+});
+
+ipcMain.handle('set-minimize-after-allow', (_e, enabled) => {
+    saveConfig({ minimizeAfterAllow: enabled });
+    sendMonitorCmd(enabled ? 'minimize-after-allow:on' : 'minimize-after-allow:off');
     return { enabled };
 });
 
