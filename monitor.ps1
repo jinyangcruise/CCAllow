@@ -113,14 +113,14 @@ function IsWindowFullyOccluded($hwnd, $procIds) {
                 $zTitle = New-Object System.Text.StringBuilder 256
                 [Win32]::GetWindowText($current, $zTitle, 256) | Out-Null
                 $covers = ($r.Left -le $tL -and $r.Top -le $tT -and $r.Right -ge $tR -and $r.Bottom -ge $tB)
-                [Console]::Error.WriteLine("Z-ABOVE: pid=$winPid name=$zName title='$($zTitle.ToString())' rect=($($r.Left),$($r.Top),$($r.Right),$($r.Bottom)) covers=$covers isClaude=$($procIds -contains [int]$winPid)")
+                # [Console]::Error.WriteLine("Z-ABOVE: pid=$winPid name=$zName title='$($zTitle.ToString())' rect=($($r.Left),$($r.Top),$($r.Right),$($r.Bottom)) covers=$covers isClaude=$($procIds -contains [int]$winPid)")
 
                 if ($covers) {
                     if ($procIds -contains [int]$winPid) { $current = [Win32]::GetWindow($current, 3); continue }
 
                     $fg = [Win32]::GetForegroundWindow()
                     if ($current -eq $fg) {
-                        [Console]::Error.WriteLine("Z-ABOVE ==> FOREGROUND, COVERED")
+                        # [Console]::Error.WriteLine("Z-ABOVE ==> FOREGROUND, COVERED")
                         return $true  # Covered by the active foreground window
                     }
                 }
@@ -151,10 +151,10 @@ function IsWindowFullyOccluded($hwnd, $procIds) {
     $fgName = (Get-Process -Id $fgPid -ErrorAction SilentlyContinue).ProcessName
     # 40 sample points: 20 interior (5x4 grid, 10% inset) + 20 on edges
     $w = $tR - $tL; $h = $tB - $tT
-    [Console]::Error.WriteLine("MULTI-OCCL: claudeRect=($tL,$tT,$tR,$tB) sz=${w}x${h} fgPid=$fgPid fgName=$fgName fgTitle='$($fgTitle.ToString())' claudePids=[$($procIds -join ',')]")
+    # [Console]::Error.WriteLine("MULTI-OCCL: claudeRect=($tL,$tT,$tR,$tB) sz=${w}x${h} fgPid=$fgPid fgName=$fgName fgTitle='$($fgTitle.ToString())' claudePids=[$($procIds -join ',')]")
     $marginX = [int]($w * 0.1); $marginY = [int]($h * 0.1)
     $innerW = $w - 2 * $marginX; $innerH = $h - 2 * $marginY
-    if ($innerW -le 0 -or $innerH -le 0) { [Console]::Error.WriteLine("MULTI-OCCL: invalid inner size"); return $false }
+    if ($innerW -le 0 -or $innerH -le 0) { # [Console]::Error.WriteLine("MULTI-OCCL: invalid inner size"); return $false }
 
     $samplePoints = @()
     # Interior grid: 5 columns x 4 rows = 20 points
@@ -182,14 +182,14 @@ function IsWindowFullyOccluded($hwnd, $procIds) {
     for ($p = 0; $p -lt $samplePoints.Count; $p += 2) {
         $x = $samplePoints[$p]; $y = $samplePoints[$p+1]
         $topHwnd = [Win32]::WindowFromPoint($x, $y)
-        if ($topHwnd -eq [IntPtr]::Zero) { [Console]::Error.WriteLine("  [$x,$y] → hwnd=0 (skip)"); continue }
+        if ($topHwnd -eq [IntPtr]::Zero) { # [Console]::Error.WriteLine("  [$x,$y] → hwnd=0 (skip)"); continue }
         $rootHwnd = [Win32]::GetAncestor($topHwnd, 2)  # GA_ROOT = 2
 
         # Check if this point shows Claude itself → visible at this point
         $winPid = [uint32]0
         [Win32]::GetWindowThreadProcessId($rootHwnd, [ref]$winPid) | Out-Null
         if ($rootHwnd -eq $hwnd -or $procIds -contains [int]$winPid) {
-            [Console]::Error.WriteLine("  [$x,$y] → Claude itself (visible)")
+            # [Console]::Error.WriteLine("  [$x,$y] → Claude itself (visible)")
             $anyClaudeVisible = $true; continue
         }
 
@@ -206,7 +206,7 @@ function IsWindowFullyOccluded($hwnd, $procIds) {
             $coveredByAbove = $false
             foreach ($w in $aboveOverlapWindows) {
                 if ($x -ge $w.left -and $x -lt $w.right -and $y -ge $w.top -and $y -lt $w.bottom) {
-                    [Console]::Error.WriteLine("  [$x,$y] → covered by known above window: name=$($w.name) title='$($w.title)' rect=($($w.left),$($w.top),$($w.right),$($w.bottom))")
+                    # [Console]::Error.WriteLine("  [$x,$y] → covered by known above window: name=$($w.name) title='$($w.title)' rect=($($w.left),$($w.top),$($w.right),$($w.bottom))")
                     $coveredByAbove = $true; break
                 }
             }
@@ -214,7 +214,7 @@ function IsWindowFullyOccluded($hwnd, $procIds) {
                 $aboveCount++
             } else {
                 $belowCount++
-                [Console]::Error.WriteLine("  [$x,$y] → NOT covered by any above window (below Claude)")
+                # [Console]::Error.WriteLine("  [$x,$y] → NOT covered by any above window (below Claude)")
             }
             continue
         }
@@ -226,13 +226,13 @@ function IsWindowFullyOccluded($hwnd, $procIds) {
         $coverRect = New-Object RECT
         [Win32]::GetWindowRect($rootHwnd, [ref]$coverRect) | Out-Null
         $pointInRect = ($x -ge $coverRect.Left -and $x -lt $coverRect.Right -and $y -ge $coverRect.Top -and $y -lt $coverRect.Bottom)
-        [Console]::Error.WriteLine("  [$x,$y] → ABOVE: name=$coverName title='$($coverTitle.ToString())' rect=($($coverRect.Left),$($coverRect.Top),$($coverRect.Right),$($coverRect.Bottom)) pointInRect=$pointInRect")
+        # [Console]::Error.WriteLine("  [$x,$y] → ABOVE: name=$coverName title='$($coverTitle.ToString())' rect=($($coverRect.Left),$($coverRect.Top),$($coverRect.Right),$($coverRect.Bottom)) pointInRect=$pointInRect")
         $aboveCount++
     }
-    [Console]::Error.WriteLine("  ==> above=$aboveCount below=$belowCount claudeVisible=$anyClaudeVisible")
-    if ($anyClaudeVisible) { [Console]::Error.WriteLine("  ==> decision: NOT occluded (Claude visible at some point)"); return $false }
-    if ($belowCount -gt 0) { [Console]::Error.WriteLine("  ==> decision: NOT occluded ($belowCount points below Claude)"); return $false }
-    [Console]::Error.WriteLine("  ==> decision: OCCLUDED (all $aboveCount points covered by windows above Claude)")
+    # [Console]::Error.WriteLine("  ==> above=$aboveCount below=$belowCount claudeVisible=$anyClaudeVisible")
+    if ($anyClaudeVisible) { # [Console]::Error.WriteLine("  ==> decision: NOT occluded (Claude visible at some point)"); return $false }
+    if ($belowCount -gt 0) { # [Console]::Error.WriteLine("  ==> decision: NOT occluded ($belowCount points below Claude)"); return $false }
+    # [Console]::Error.WriteLine("  ==> decision: OCCLUDED (all $aboveCount points covered by windows above Claude)")
     return $true
 }
 
@@ -382,16 +382,16 @@ while ($running) {
 
         # Window not minimized but button not found → check if fully occluded
         if ($minimizedPolling) {
-            Write-Output "  [dbg] not-min, polling=ON, checking occlusion..."
+            # Write-Output "  [dbg] not-min, polling=ON, checking occlusion..."
             if (IsWindowFullyOccluded $hwnd $allClaudePids) {
-                Write-Output "  [dbg] OCCLUDED → peek"
+                # Write-Output "  [dbg] OCCLUDED → peek"
                 if (PeekOccluded $hwnd $p.Id) { continue }
             } else {
-                Write-Output "  [dbg] NOT occluded"
+                # Write-Output "  [dbg] NOT occluded"
             }
-            Write-Output "  [dbg] sleep ${peekInterval}ms start"
+            # Write-Output "  [dbg] sleep ${peekInterval}ms start"
             Start-Sleep -Milliseconds $peekInterval
-            Write-Output "  [dbg] sleep ${peekInterval}ms done"
+            # Write-Output "  [dbg] sleep ${peekInterval}ms done"
             continue
         }
 
@@ -400,7 +400,7 @@ while ($running) {
     }
 
     # Claude IS minimized
-    Write-Output "  [dbg] minimized, polling=$minimizedPolling"
+    # Write-Output "  [dbg] minimized, polling=$minimizedPolling"
     if ($minimizedPolling) {
         if (PeekAndScan $hwnd $p.Id) { continue }
         Start-Sleep -Milliseconds $peekInterval
