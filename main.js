@@ -119,6 +119,8 @@ function stopMonitor() {
     rebuildTrayMenu();
 }
 
+ipcMain.handle('get-version', () => require('./package.json').version);
+
 ipcMain.handle('toggle-monitor', () => {
     if (monitorEnabled) stopMonitor();
     else startMonitor();
