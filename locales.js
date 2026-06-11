@@ -44,6 +44,10 @@ const locales = {
         downloadFailed: '下载失败',
         installPrompt: '下载完成，是否立即安装？',
         installStarted: '正在启动安装程序...',
+        checkUpdateTitle: '自动检查更新',
+        checkUpdateDesc: '启动时自动检测新版本',
+        checkUpdateOn: '自动检查更新已开启',
+        checkUpdateOff: '自动检查更新已关闭',
     },
     en: {
         title: 'CC Allow',
@@ -90,5 +94,9 @@ const locales = {
         downloadFailed: 'Download failed',
         installPrompt: 'Download complete. Install now?',
         installStarted: 'Starting installer...',
+        checkUpdateTitle: 'Auto check updates',
+        checkUpdateDesc: 'Automatically check for updates on startup',
+        checkUpdateOn: 'Auto check updates enabled',
+        checkUpdateOff: 'Auto check updates disabled',
     },
 };

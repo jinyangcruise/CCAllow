@@ -162,6 +162,19 @@ h1{font-size:20px;color:#1d1d1f}
     </div>
 </div>
 
+<div class="card">
+    <div class="card-row">
+        <div>
+            <div class="card-label" data-i18n="checkUpdateTitle">自动检查更新</div>
+            <div class="card-desc" data-i18n="checkUpdateDesc">启动时自动检测新版本</div>
+        </div>
+        <label class="toggle-switch">
+            <input type="checkbox" id="checkUpdates">
+            <span class="slider"></span>
+        </label>
+    </div>
+</div>
+
 <div id="status" class="status idle" data-i18n="statusIdle">就绪</div>
 
 <div class="log-top"><span data-i18n="log">日志</span><button id="clearLog" data-i18n="clear">清空</button><button id="copyLog" data-i18n="copy">复制</button></div>
@@ -186,6 +199,7 @@ var intervalCard = document.getElementById('intervalCard');
 var minAfterAllow = document.getElementById('minAfterAllow');
 var autoStart = document.getElementById('autoStart');
 var silentStartEl = document.getElementById('silentStart');
+var checkUpdatesEl = document.getElementById('checkUpdates');
 var statusEl = document.getElementById('status');
 var logEl = document.getElementById('log');
 
@@ -282,6 +296,10 @@ window.ccallow.getSilentStart().then(function(state) {
     silentStartEl.checked = state.enabled;
 });
 
+window.ccallow.getCheckUpdates().then(function(state) {
+    checkUpdatesEl.checked = state.enabled;
+});
+
 window.ccallow.onMonitorLog(function(msg) {
     log(msg);
 });
@@ -329,6 +347,11 @@ autoStart.addEventListener('change', async function() {
 silentStartEl.addEventListener('change', async function() {
     var result = await window.ccallow.setSilentStart(silentStartEl.checked);
     log(result.enabled ? t('silentStartOn') : t('silentStartOff'));
+});
+
+checkUpdatesEl.addEventListener('change', async function() {
+    var result = await window.ccallow.setCheckUpdates(this.checked);
+    log(result.enabled ? t('checkUpdateOn') : t('checkUpdateOff'));
 });
 
 // --- Log buttons ---
