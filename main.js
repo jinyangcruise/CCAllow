@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, shell } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -203,6 +203,8 @@ ipcMain.handle('set-minimized-interval', (_e, interval) => {
     sendMonitorCmd(`interval:${interval}`);
     return { interval };
 });
+
+ipcMain.handle('open-url', (_e, url) => { shell.openExternal(url); return true; });
 
 app.isQuitting = false;
 app.on('before-quit', () => { app.isQuitting = true; stopMonitor(); });
