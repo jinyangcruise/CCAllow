@@ -1,6 +1,6 @@
 {
   "name": "ccallow",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Auto-click Allow buttons for Claude Desktop via UI Automation",
   "main": "main.js",
   "author": "jinyangcruise",
