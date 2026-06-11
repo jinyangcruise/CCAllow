@@ -122,6 +122,7 @@ function stopMonitor() {
 ipcMain.handle('toggle-monitor', () => {
     if (monitorEnabled) stopMonitor();
     else startMonitor();
+    saveConfig({ autoAllow: monitorEnabled });
     return { enabled: monitorEnabled };
 });
 
@@ -187,7 +188,7 @@ app.whenReady().then(() => {
     configPath = path.join(app.getPath('userData'), 'config.json');
     applyAutoStart();
     const cfg = getConfig();
-    if (cfg.autoStart !== false) startMonitor();
+    if (cfg.autoAllow === true) startMonitor();
     createWindow();
     createTray();
     if (cfg.silentStart === true) mainWindow.hide();
