@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>CCAllow</title>
+<title>CC Allow</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 ::-webkit-scrollbar{width:6px}
@@ -59,7 +59,7 @@ h1{font-size:20px;color:#fff}
     <button id="langEn">EN</button>
 </div>
 
-<h1>CCAllow</h1>
+<h1>CC Allow</h1>
 <div class="subtitle" data-i18n="subtitle">UI Automation · 自动点击 Allow 按钮</div>
 
 <div class="card">
@@ -132,7 +132,7 @@ h1{font-size:20px;color:#fff}
 <div id="status" class="status idle" data-i18n="statusIdle">就绪</div>
 
 <div class="log-top"><span data-i18n="log">日志</span><button id="clearLog" data-i18n="clear">清空</button><button id="copyLog" data-i18n="copy">复制</button></div>
-<div class="log" id="log">[CCAllow] 启动完成</div>
+<div class="log" id="log">[CC Allow] 启动完成</div>
 
 <div class="footer" data-i18n="footer">通过 Windows UI Automation 工作</div>
 
@@ -183,7 +183,7 @@ function formatInterval(ms) {
 window.ccallow.getLanguage().then(function(state) {
     currentLang = state.lang;
     applyLang();
-    document.title = 'CCAllow' + (currentLang === 'en' ? '' : '');
+    document.title = 'CC Allow';
 });
 
 document.getElementById('langZh').addEventListener('click', async function() {

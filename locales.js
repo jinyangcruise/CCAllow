@@ -1,6 +1,6 @@
 const locales = {
     zh: {
-        title: 'CCAllow',
+        title: 'CC Allow',
         subtitle: 'UI Automation · 自动点击 Allow 按钮',
         autoAllow: 'Auto Allow',
         autoAllowDesc: '检测到 Allow 按钮时自动点击',
@@ -36,7 +36,7 @@ const locales = {
         pollingOff: '已关闭最小化轮询',
     },
     en: {
-        title: 'CCAllow',
+        title: 'CC Allow',
         subtitle: 'UI Automation · Auto-click Allow',
         autoAllow: 'Auto Allow',
         autoAllowDesc: 'Automatically click Allow when detected',

@@ -52,7 +52,7 @@ function createWindow() {
 
 function createTray() {
     tray = new Tray(trayIconPath);
-    tray.setToolTip('CCAllow');
+    tray.setToolTip('CC Allow');
     rebuildTrayMenu();
     tray.on('click', () => { mainWindow.isVisible() ? mainWindow.focus() : (mainWindow.show(), mainWindow.focus()); });
 }

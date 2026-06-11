@@ -11,7 +11,7 @@
   },
   "build": {
     "appId": "com.ccallow.app",
-    "productName": "CCAllow",
+    "productName": "CC Allow",
     "directories": {
       "output": "dist"
     },
