@@ -17,7 +17,14 @@ public class Win32 {
     [DllImport("user32.dll")] public static extern bool SetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwp);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
     [DllImport("user32.dll")] public static extern int GetSystemMetrics(int nIndex);
+    [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+    [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(int x, int y);
+    [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hwnd, int gaFlags);
+    [DllImport("shcore.dll")] public static extern int SetProcessDpiAwareness(int value);
     [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, IntPtr attrValue, int attrSize);
+    [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -37,6 +44,9 @@ public struct WINDOWPLACEMENT {
     public RECT rcDevice;
 }
 "@
+
+# Enable DPI awareness so GetWindowRect and WindowFromPoint use the same coordinate system
+[Win32]::SetProcessDpiAwareness(2) | Out-Null  # PROCESS_PER_MONITOR_DPI_AWARE
 
 $SM_CXSCREEN = 0; $SM_CYSCREEN = 1
 
@@ -81,6 +91,42 @@ function FindAllowButton($root) {
     return $null
 }
 
+function IsWindowFullyOccluded($hwnd, $procIds) {
+    $targetRect = New-Object RECT
+    if (-not [Win32]::GetWindowRect($hwnd, [ref]$targetRect)) { return $false }
+    $tL = $targetRect.Left; $tT = $targetRect.Top
+    $tR = $targetRect.Right; $tB = $targetRect.Bottom
+    if ($tR -le $tL -or $tB -le $tT) { return $false }
+
+    # Walk Z-order upward from Claude's window
+    $current = [Win32]::GetWindow($hwnd, 3)  # GW_HWNDPREV = 3
+    while ($current -ne [IntPtr]::Zero) {
+        if ([Win32]::IsWindowVisible($current) -and -not [Win32]::IsIconic($current)) {
+            $r = New-Object RECT
+            if ([Win32]::GetWindowRect($current, [ref]$r)) {
+                # Check if this window fully covers Claude
+                if ($r.Left -le $tL -and $r.Top -le $tT -and
+                    $r.Right -ge $tR -and $r.Bottom -ge $tB) {
+
+                    # Skip Claude's own windows
+                    $winPid = [uint32]0
+                    [Win32]::GetWindowThreadProcessId($current, [ref]$winPid) | Out-Null
+                    if ($procIds -contains [int]$winPid) { $current = [Win32]::GetWindow($current, 3); continue }
+
+                    # Only treat as occluded if the covering window is ALSO the foreground window
+                    # This avoids false positives from toolbar/taskbar windows that span the full desktop
+                    $fg = [Win32]::GetForegroundWindow()
+                    if ($current -eq $fg) {
+                        return $true  # Covered by the active foreground window
+                    }
+                }
+            }
+        }
+        $current = [Win32]::GetWindow($current, 3)
+    }
+    return $false
+}
+
 function ClickButton($btn, $procId) {
     $name = $btn.Current.Name.Trim()
     Write-Output "found: >>$name<<"
@@ -119,6 +165,48 @@ function EnableAnim($hwnd) {
     [System.Runtime.InteropServices.Marshal]::FreeHGlobal($mem)
 }
 
+function PeekAndScan($hwnd, $procId) {
+    DisableAnim $hwnd
+    $wp = New-Object WINDOWPLACEMENT
+    $wp.length = [System.Runtime.InteropServices.Marshal]::SizeOf($wp)
+    [Win32]::GetWindowPlacement($hwnd, [ref]$wp) | Out-Null
+    $savedWp = $wp
+    $sw = [Win32]::GetSystemMetrics(0); $sh = [Win32]::GetSystemMetrics(1)
+    $pw = $wp.rcNormalPosition.Right - $wp.rcNormalPosition.Left
+    $ph = $wp.rcNormalPosition.Bottom - $wp.rcNormalPosition.Top
+    $offX = [Math]::Max(0, $sw - 10); $offY = [Math]::Max(0, $sh - 10 - 80)
+    $r = $wp.rcNormalPosition
+    $r.Left = $offX; $r.Top = $offY; $r.Right = $offX + $pw; $r.Bottom = $offY + $ph
+    $wp.rcNormalPosition = $r
+    $wp.showCmd = 6  # SW_MINIMIZE (keep minimized without activating)
+    [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
+    Start-Sleep -Milliseconds 100
+    [Win32]::ShowWindow($hwnd, 4) | Out-Null  # SW_SHOWNOACTIVATE (show at new pos)
+    [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
+    Start-Sleep -Milliseconds 600
+    try {
+        $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
+        if ($btn) {
+            EnableAnim $hwnd
+            $savedWp.showCmd = 4
+            [Win32]::SetWindowPlacement($hwnd, [ref]$savedWp) | Out-Null
+            ClickButton $btn $procId | Out-Null
+            if ($script:minimizeAfterAllow) {
+                $savedWp.showCmd = 6  # SW_MINIMIZE
+                [Win32]::SetWindowPlacement($hwnd, [ref]$savedWp) | Out-Null
+            }
+            EnableAnim $hwnd
+            return $true
+        }
+    } catch { }
+    EnableAnim $hwnd
+    # Restore: save original position but minimize the window
+    # When user clicks taskbar icon, it will restore to original position
+    $savedWp.showCmd = 2  # SW_SHOWMINIMIZED
+    [Win32]::SetWindowPlacement($hwnd, [ref]$savedWp) | Out-Null
+    return $false
+}
+
 while ($running) {
     $loopCount++
     if ($loopCount % 10 -eq 0) { } # Write-Output "alive (loop $loopCount, polling=$minimizedPolling, interval=$peekInterval)"
@@ -141,6 +229,11 @@ while ($running) {
     $hwnd = $p.MainWindowHandle
     $isMin = [Win32]::IsIconic($hwnd)
 
+    # Collect ALL Claude process PIDs (multi-process: main, GPU, renderer, etc.)
+    $allClaudePids = @(Get-Process -ErrorAction SilentlyContinue |
+        Where-Object { $_.ProcessName -match 'claude' } |
+        ForEach-Object { $_.Id })
+
     # Check Claude window when NOT minimized
     if (-not $isMin) {
         try {
@@ -148,59 +241,27 @@ while ($running) {
             $btn = FindAllowButton $root
             if ($btn) { ClickButton $btn $p.Id; continue }
         } catch { Write-Output "  check err: $_" }
+
+        # Window not minimized but button not found → check if fully occluded
+        if ($minimizedPolling) {
+            Write-Output "  [dbg] not-min, polling=ON, checking occlusion..."
+            if (IsWindowFullyOccluded $hwnd $allClaudePids) {
+                Write-Output "  [dbg] OCCLUDED → peek"
+                if (PeekAndScan $hwnd $p.Id) { continue }
+                Start-Sleep -Milliseconds $peekInterval
+                continue
+            }
+            Write-Output "  [dbg] NOT occluded"
+        }
+
         Start-Sleep -Milliseconds 400
         continue
     }
 
     # Claude IS minimized
+    Write-Output "  [dbg] minimized, polling=$minimizedPolling"
     if ($minimizedPolling) {
-        DisableAnim $hwnd
-        # Save placement for restore later
-        $wp = New-Object WINDOWPLACEMENT
-        $wp.length = [System.Runtime.InteropServices.Marshal]::SizeOf($wp)
-        [Win32]::GetWindowPlacement($hwnd, [ref]$wp) | Out-Null
-        $savedWp = $wp
-        $sw = [Win32]::GetSystemMetrics(0); $sh = [Win32]::GetSystemMetrics(1)
-        $pw = $wp.rcNormalPosition.Right - $wp.rcNormalPosition.Left
-        $ph = $wp.rcNormalPosition.Bottom - $wp.rcNormalPosition.Top
-        # Write-Output "  savedPos=($($wp.rcNormalPosition.Left),$($wp.rcNormalPosition.Top)) screen=($sw,$sh) win=($pw,$ph)"
-        # Set position while hidden, wait, then show (no flash)
-        $offX = [Math]::Max(0, $sw - 10); $offY = [Math]::Max(0, $sh - 10 - 80)
-        $r = $wp.rcNormalPosition
-        $r.Left = $offX; $r.Top = $offY; $r.Right = $offX + $pw; $r.Bottom = $offY + $ph
-        $wp.rcNormalPosition = $r
-        $wp.showCmd = 6  # SW_MINIMIZE (keep minimized without activating)
-        [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
-        Start-Sleep -Milliseconds 100
-        [Win32]::ShowWindow($hwnd, 4) | Out-Null  # SW_SHOWNOACTIVATE (show at new pos)
-        # Write-Output "  target=$offX,$offY"
-        # Verify actual position
-        $wp2 = New-Object WINDOWPLACEMENT
-        $wp2.length = [System.Runtime.InteropServices.Marshal]::SizeOf($wp2)
-        [Win32]::GetWindowPlacement($hwnd, [ref]$wp2) | Out-Null
-        # Write-Output "  actual=$($wp2.rcNormalPosition.Left),$($wp2.rcNormalPosition.Top)"
-        [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
-        Start-Sleep -Milliseconds 600
-        # Write-Output "  checking..."
-        try {
-            $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
-            if ($btn) {
-                EnableAnim $hwnd
-                $savedWp.showCmd = 4
-                [Win32]::SetWindowPlacement($hwnd, [ref]$savedWp) | Out-Null
-                ClickButton $btn $p.Id
-                if ($script:minimizeAfterAllow) {
-                    $savedWp.showCmd = 6  # SW_MINIMIZE
-                    [Win32]::SetWindowPlacement($hwnd, [ref]$savedWp) | Out-Null
-                }
-                continue
-            }
-        } catch { Write-Output "  check error: $_" }
-        EnableAnim $hwnd
-        # minimize first, then restore position (no animation)
-        [Win32]::ShowWindow($hwnd, 6) | Out-Null  # SW_MINIMIZE
-        Start-Sleep -Milliseconds 100
-        [Win32]::SetWindowPlacement($hwnd, [ref]$savedWp) | Out-Null
+        if (PeekAndScan $hwnd $p.Id) { continue }
         Start-Sleep -Milliseconds $peekInterval
     } else {
         Start-Sleep -Milliseconds 1000
