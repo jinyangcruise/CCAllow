@@ -316,6 +316,35 @@ function PeekAndScan($hwnd, $procId) {
     return $false
 }
 
+function PeekOccluded($hwnd, $procId) {
+    DisableAnim $hwnd
+    $origRect = New-Object RECT
+    [Win32]::GetWindowRect($hwnd, [ref]$origRect) | Out-Null
+    $sw = [Win32]::GetSystemMetrics(0); $sh = [Win32]::GetSystemMetrics(1)
+    $pw = $origRect.Right - $origRect.Left; $ph = $origRect.Bottom - $origRect.Top
+    $offX = [Math]::Max(0, $sw - 10); $offY = [Math]::Max(0, $sh - 10 - 80)
+
+    # Move to bottom-right (no state change, no activate)
+    [Win32]::SetWindowPos($hwnd, [IntPtr]::Zero, $offX, $offY, $pw, $ph, 0x0014)  # SWP_NOZORDER|SWP_NOACTIVATE
+    Start-Sleep -Milliseconds 600
+
+    try {
+        $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
+        if ($btn) {
+            # Move back before clicking
+            [Win32]::SetWindowPos($hwnd, [IntPtr]::Zero, $origRect.Left, $origRect.Top, $pw, $ph, 0x0014)
+            EnableAnim $hwnd
+            ClickButton $btn $procId | Out-Null
+            return $true
+        }
+    } catch { }
+
+    # Move back to original position
+    [Win32]::SetWindowPos($hwnd, [IntPtr]::Zero, $origRect.Left, $origRect.Top, $pw, $ph, 0x0014)
+    EnableAnim $hwnd
+    return $false
+}
+
 while ($running) {
     $loopCount++
     if ($loopCount % 10 -eq 0) { } # Write-Output "alive (loop $loopCount, polling=$minimizedPolling, interval=$peekInterval)"
@@ -356,11 +385,14 @@ while ($running) {
             Write-Output "  [dbg] not-min, polling=ON, checking occlusion..."
             if (IsWindowFullyOccluded $hwnd $allClaudePids) {
                 Write-Output "  [dbg] OCCLUDED → peek"
-                if (PeekAndScan $hwnd $p.Id) { continue }
-                Start-Sleep -Milliseconds $peekInterval
-                continue
+                if (PeekOccluded $hwnd $p.Id) { continue }
+            } else {
+                Write-Output "  [dbg] NOT occluded"
             }
-            Write-Output "  [dbg] NOT occluded"
+            Write-Output "  [dbg] sleep ${peekInterval}ms start"
+            Start-Sleep -Milliseconds $peekInterval
+            Write-Output "  [dbg] sleep ${peekInterval}ms done"
+            continue
         }
 
         Start-Sleep -Milliseconds 400
