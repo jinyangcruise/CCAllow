@@ -173,12 +173,12 @@ while ($running) {
         [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
         Start-Sleep -Milliseconds 100
         [Win32]::ShowWindow($hwnd, 4) | Out-Null  # SW_SHOWNOACTIVATE (show at new pos)
-        Write-Output "  target=$offX,$offY"
+        # Write-Output "  target=$offX,$offY"
         # Verify actual position
         $wp2 = New-Object WINDOWPLACEMENT
         $wp2.length = [System.Runtime.InteropServices.Marshal]::SizeOf($wp2)
         [Win32]::GetWindowPlacement($hwnd, [ref]$wp2) | Out-Null
-        Write-Output "  actual=$($wp2.rcNormalPosition.Left),$($wp2.rcNormalPosition.Top)"
+        # Write-Output "  actual=$($wp2.rcNormalPosition.Left),$($wp2.rcNormalPosition.Top)"
         [Win32]::SetWindowPlacement($hwnd, [ref]$wp) | Out-Null
         Start-Sleep -Milliseconds 600
         # Write-Output "  checking..."
