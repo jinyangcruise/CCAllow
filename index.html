@@ -16,7 +16,7 @@ h1{font-size:20px;color:#fff}
 .card{background:#16213e;border:1px solid #2d2d4a;border-radius:12px;padding:16px;margin-bottom:10px}
 .card-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .card-label{font-size:14px;color:#e0e0e0}
-.card-desc{font-size:12px;color:#64748b;margin-top:2px}
+.card-desc{font-size:12px;color:#64748b;margin-top:2px;line-height:1.4}
 
 .toggle-switch{position:relative;width:48px;height:26px;flex-shrink:0;cursor:pointer}
 .toggle-switch input{opacity:0;width:0;height:0}
@@ -32,11 +32,17 @@ h1{font-size:20px;color:#fff}
 .sub-card input[type=range]{flex:1;accent-color:#4f46e5;height:4px;cursor:pointer}
 .sub-card .val{font-size:13px;color:#e0e0e0;min-width:48px;text-align:right;font-variant-numeric:tabular-nums}
 .sub-card .hint{font-size:11px;color:#475569;margin-top:6px;line-height:1.4}
+.sub-card .toggle-row{display:flex;align-items:center;justify-content:space-between;margin-top:10px}
+.sub-card .toggle-row span{font-size:12px;color:#94a3b8}
 
 .status{margin-top:4px;padding:8px 12px;border-radius:8px;font-size:13px}
 .status.idle{background:#1e3a5f;color:#93c5fd}
 .status.active{background:#14532d;color:#86efac}
 .status.error{background:#450a0a;color:#fca5a5}
+
+.lang-bar{display:flex;justify-content:flex-end;gap:4px;margin-bottom:8px}
+.lang-bar button{background:transparent;border:1px solid #444;color:#64748b;padding:2px 10px;border-radius:4px;cursor:pointer;font-size:11px}
+.lang-bar button.active{border-color:#4f46e5;color:#4f46e5;background:rgba(79,70,229,0.1)}
 
 .log-top{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:4px}
 .log-top span{font-size:11px;color:#64748b;flex:1}
@@ -48,14 +54,19 @@ h1{font-size:20px;color:#fff}
 </head>
 <body>
 
+<div class="lang-bar">
+    <button id="langZh" class="active">中文</button>
+    <button id="langEn">EN</button>
+</div>
+
 <h1>CCAllow</h1>
-<div class="subtitle">UI Automation · 自动点击 Allow 按钮</div>
+<div class="subtitle" data-i18n="subtitle">UI Automation · 自动点击 Allow 按钮</div>
 
 <div class="card">
     <div class="card-row">
         <div>
-            <div class="card-label">Auto Allow</div>
-            <div class="card-desc">检测到 Allow 按钮时自动点击</div>
+            <div class="card-label" data-i18n="autoAllow">Auto Allow</div>
+            <div class="card-desc" data-i18n="autoAllowDesc">检测到 Allow 按钮时自动点击</div>
         </div>
         <label class="toggle-switch">
             <input type="checkbox" id="toggle">
@@ -67,8 +78,8 @@ h1{font-size:20px;color:#fff}
 <div class="card">
     <div class="card-row">
         <div>
-            <div class="card-label">最小化时轮询</div>
-            <div class="card-desc">Claude 最小化后，定期唤醒检查 Allow 请求<br>√ 优点：最小化时也能自动 Allow<br>× 缺点：窗口会短暂在后台闪现</div>
+            <div class="card-label" data-i18n="minimizedPolling">最小化时轮询</div>
+            <div class="card-desc" data-i18n="minimizedPollingDesc">Claude 最小化后，定期唤醒检查 Allow 请求</div>
         </div>
         <label class="toggle-switch">
             <input type="checkbox" id="minPoll">
@@ -76,14 +87,14 @@ h1{font-size:20px;color:#fff}
         </label>
     </div>
     <div class="sub-card" id="intervalCard">
-        <label>轮询间隔</label>
+        <label data-i18n="interval">轮询间隔</label>
         <div class="field-row">
             <input type="range" id="intervalRange" min="500" max="5000" step="100">
             <span class="val" id="intervalVal">2.5s</span>
         </div>
-        <div class="hint">间隔越短响应越快，但窗口闪现更频繁。建议 2–3 秒。</div>
-        <div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between">
-            <span style="font-size:12px;color:#94a3b8">Allow 后自动最小化窗口</span>
+        <div class="hint" data-i18n="intervalHint">间隔越短响应越快，但窗口闪现更频繁。建议 2–3 秒。</div>
+        <div class="toggle-row">
+            <span data-i18n="minimizeAfterAllow">Allow 后自动最小化窗口</span>
             <label class="toggle-switch">
                 <input type="checkbox" id="minAfterAllow">
                 <span class="slider"></span>
@@ -95,8 +106,8 @@ h1{font-size:20px;color:#fff}
 <div class="card">
     <div class="card-row">
         <div>
-            <div class="card-label">开机自动启动</div>
-            <div class="card-desc">系统启动时自动运行本软件</div>
+            <div class="card-label" data-i18n="autoStart">开机自动启动</div>
+            <div class="card-desc" data-i18n="autoStartDesc">系统启动时自动运行本软件</div>
         </div>
         <label class="toggle-switch">
             <input type="checkbox" id="autoStart">
@@ -108,8 +119,8 @@ h1{font-size:20px;color:#fff}
 <div class="card">
     <div class="card-row">
         <div>
-            <div class="card-label">静默启动</div>
-            <div class="card-desc">启动时不显示主窗口，仅在托盘运行</div>
+            <div class="card-label" data-i18n="silentStart">静默启动</div>
+            <div class="card-desc" data-i18n="silentStartDesc">启动时不显示主窗口，仅在托盘运行</div>
         </div>
         <label class="toggle-switch">
             <input type="checkbox" id="silentStart">
@@ -118,23 +129,40 @@ h1{font-size:20px;color:#fff}
     </div>
 </div>
 
-<div id="status" class="status idle">就绪</div>
+<div id="status" class="status idle" data-i18n="statusIdle">就绪</div>
 
-<div class="log-top"><span>日志</span><button id="clearLog">清空</button><button id="copyLog">复制</button></div>
+<div class="log-top"><span data-i18n="log">日志</span><button id="clearLog" data-i18n="clear">清空</button><button id="copyLog" data-i18n="copy">复制</button></div>
 <div class="log" id="log">[CCAllow] 启动完成</div>
 
-<div class="footer">通过 Windows UI Automation 工作</div>
+<div class="footer" data-i18n="footer">通过 Windows UI Automation 工作</div>
 
+<script src="locales.js"></script>
 <script>
+var currentLang = 'zh';
 var toggle = document.getElementById('toggle');
 var minPoll = document.getElementById('minPoll');
 var intervalRange = document.getElementById('intervalRange');
 var intervalVal = document.getElementById('intervalVal');
 var intervalCard = document.getElementById('intervalCard');
+var minAfterAllow = document.getElementById('minAfterAllow');
 var autoStart = document.getElementById('autoStart');
 var silentStartEl = document.getElementById('silentStart');
 var statusEl = document.getElementById('status');
 var logEl = document.getElementById('log');
+
+function t(key) {
+    return (locales[currentLang] && locales[currentLang][key]) || locales['zh'][key] || key;
+}
+
+function applyLang() {
+    document.querySelectorAll('[data-i18n]').forEach(function(el) {
+        var key = el.getAttribute('data-i18n');
+        el.textContent = t(key);
+    });
+    document.querySelectorAll('.lang-bar button').forEach(function(b) {
+        b.classList.toggle('active', b.id === 'lang' + (currentLang === 'zh' ? 'Zh' : 'En'));
+    });
+}
 
 function setStatus(msg, type) {
     statusEl.textContent = msg;
@@ -151,10 +179,29 @@ function formatInterval(ms) {
     return ms >= 1000 ? (ms / 1000).toFixed(1) + 's' : ms + 'ms';
 }
 
+// --- Language ---
+window.ccallow.getLanguage().then(function(state) {
+    currentLang = state.lang;
+    applyLang();
+    document.title = 'CCAllow' + (currentLang === 'en' ? '' : '');
+});
+
+document.getElementById('langZh').addEventListener('click', async function() {
+    currentLang = 'zh';
+    await window.ccallow.setLanguage('zh');
+    applyLang();
+});
+
+document.getElementById('langEn').addEventListener('click', async function() {
+    currentLang = 'en';
+    await window.ccallow.setLanguage('en');
+    applyLang();
+});
+
 // --- Load settings ---
 window.ccallow.getStatus().then(function(state) {
     toggle.checked = state.enabled;
-    if (state.enabled) setStatus('监控中...', 'active');
+    if (state.enabled) setStatus(t('statusActive'), 'active');
 });
 
 window.ccallow.getMinimizedPolling().then(function(state) {
@@ -167,16 +214,16 @@ window.ccallow.getMinimizedInterval().then(function(state) {
     intervalVal.textContent = formatInterval(state.interval);
 });
 
+window.ccallow.getMinimizeAfterAllow().then(function(state) {
+    minAfterAllow.checked = state.enabled;
+});
+
 window.ccallow.getAutoStart().then(function(state) {
     autoStart.checked = state.enabled;
 });
 
 window.ccallow.getSilentStart().then(function(state) {
     silentStartEl.checked = state.enabled;
-});
-
-window.ccallow.getMinimizeAfterAllow().then(function(state) {
-    document.getElementById('minAfterAllow').checked = state.enabled;
 });
 
 window.ccallow.onMonitorLog(function(msg) {
@@ -187,20 +234,15 @@ window.ccallow.onMonitorLog(function(msg) {
 toggle.addEventListener('change', async function() {
     var result = await window.ccallow.toggleMonitor();
     toggle.checked = result.enabled;
-    if (result.enabled) {
-        setStatus('监控中... 检测到 Allow 按钮将自动点击', 'active');
-        log('监控已启动');
-    } else {
-        setStatus('已停止', 'idle');
-        log('监控已停止');
-    }
+    if (result.enabled) { setStatus(t('statusActive'), 'active'); log(t('monitoringStarted')); }
+    else { setStatus(t('statusStopped'), 'idle'); log(t('monitoringStopped')); }
 });
 
 // --- Minimized polling ---
 minPoll.addEventListener('change', async function() {
     var result = await window.ccallow.setMinimizedPolling(minPoll.checked);
     intervalCard.classList.toggle('visible', result.enabled);
-    log(result.enabled ? '已开启最小化轮询' : '已关闭最小化轮询');
+    log(result.enabled ? t('pollingOn') : t('pollingOff'));
 });
 
 intervalRange.addEventListener('input', async function() {
@@ -209,28 +251,28 @@ intervalRange.addEventListener('input', async function() {
     await window.ccallow.setMinimizedInterval(val);
 });
 
-document.getElementById('minAfterAllow').addEventListener('change', async function() {
+minAfterAllow.addEventListener('change', async function() {
     var result = await window.ccallow.setMinimizeAfterAllow(this.checked);
-    log(result.enabled ? 'Allow 后自动最小化已开启' : 'Allow 后自动最小化已关闭');
+    log(result.enabled ? t('minimizeAfterAllowOn') : t('minimizeAfterAllowOff'));
 });
 
 // --- Tray toggle ---
 window.ccallow.onTrayToggle(async function() {
     var result = await window.ccallow.toggleMonitor();
     toggle.checked = result.enabled;
-    if (result.enabled) { setStatus('监控中...', 'active'); log('监控已启动'); }
-    else { setStatus('已停止', 'idle'); log('监控已停止'); }
+    if (result.enabled) { setStatus(t('statusActive'), 'active'); log(t('monitoringStarted')); }
+    else { setStatus(t('statusStopped'), 'idle'); log(t('monitoringStopped')); }
 });
 
 // --- Other toggles ---
 autoStart.addEventListener('change', async function() {
     var result = await window.ccallow.setAutoStart(autoStart.checked);
-    log(result.enabled ? '已开启开机自动启动' : '已关闭开机自动启动');
+    log(result.enabled ? t('autoStartOn') : t('autoStartOff'));
 });
 
 silentStartEl.addEventListener('change', async function() {
     var result = await window.ccallow.setSilentStart(silentStartEl.checked);
-    log(result.enabled ? '已开启静默启动' : '已关闭静默启动');
+    log(result.enabled ? t('silentStartOn') : t('silentStartOff'));
 });
 
 // --- Log buttons ---
@@ -241,8 +283,8 @@ document.getElementById('clearLog').addEventListener('click', function() {
 document.getElementById('copyLog').addEventListener('click', function() {
     var text = logEl.textContent;
     navigator.clipboard.writeText(text).then(function() {
-        document.getElementById('copyLog').textContent = '已复制';
-        setTimeout(function() { document.getElementById('copyLog').textContent = '复制'; }, 1500);
+        document.getElementById('copyLog').textContent = t('copied');
+        setTimeout(function() { document.getElementById('copyLog').textContent = t('copy'); }, 1500);
     });
 });
 </script>

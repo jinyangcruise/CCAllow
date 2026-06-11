@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('ccallow', {
     setMinimizedInterval: (v) => ipcRenderer.invoke('set-minimized-interval', v),
     getMinimizeAfterAllow: () => ipcRenderer.invoke('get-minimize-after-allow'),
     setMinimizeAfterAllow: (v) => ipcRenderer.invoke('set-minimize-after-allow', v),
+    getLanguage: () => ipcRenderer.invoke('get-language'),
+    setLanguage: (v) => ipcRenderer.invoke('set-language', v),
     onTrayToggle: (cb) => ipcRenderer.on('tray-toggle', () => cb()),
     onMonitorLog: (cb) => ipcRenderer.on('monitor-log', (_e, msg) => cb(msg)),
 });

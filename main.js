@@ -171,6 +171,16 @@ ipcMain.handle('set-minimize-after-allow', (_e, enabled) => {
     return { enabled };
 });
 
+ipcMain.handle('get-language', () => {
+    const cfg = getConfig();
+    return { lang: cfg.language || 'zh' };
+});
+
+ipcMain.handle('set-language', (_e, lang) => {
+    saveConfig({ language: lang });
+    return { lang };
+});
+
 ipcMain.handle('get-minimized-interval', () => {
     const cfg = getConfig();
     return { interval: cfg.minimizedInterval || 2500 };
