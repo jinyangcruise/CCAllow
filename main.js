@@ -121,6 +121,16 @@ function stopMonitor() {
 
 ipcMain.handle('get-version', () => require('./package.json').version);
 
+ipcMain.handle('get-theme', () => {
+    const cfg = getConfig();
+    return { theme: cfg.theme || 'light' };
+});
+
+ipcMain.handle('set-theme', (_e, theme) => {
+    saveConfig({ theme });
+    return { theme };
+});
+
 ipcMain.handle('toggle-monitor', () => {
     if (monitorEnabled) stopMonitor();
     else startMonitor();

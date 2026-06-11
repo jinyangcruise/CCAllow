@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('ccallow', {
     getVersion: () => ipcRenderer.invoke('get-version'),
+    getTheme: () => ipcRenderer.invoke('get-theme'),
+    setTheme: (v) => ipcRenderer.invoke('set-theme', v),
     toggleMonitor: () => ipcRenderer.invoke('toggle-monitor'),
     getStatus: () => ipcRenderer.invoke('get-status'),
     getAutoStart: () => ipcRenderer.invoke('get-auto-start'),
