@@ -149,66 +149,85 @@ function IsWindowFullyOccluded($hwnd, $procIds) {
     $fgPid = [uint32]0
     [Win32]::GetWindowThreadProcessId($fg, [ref]$fgPid) | Out-Null
     $fgName = (Get-Process -Id $fgPid -ErrorAction SilentlyContinue).ProcessName
-    # 5x4 grid = 20 sample points, inset 10% from edges
+    # 40 sample points: 20 interior (5x4 grid, 10% inset) + 20 on edges
     $w = $tR - $tL; $h = $tB - $tT
     [Console]::Error.WriteLine("MULTI-OCCL: claudeRect=($tL,$tT,$tR,$tB) sz=${w}x${h} fgPid=$fgPid fgName=$fgName fgTitle='$($fgTitle.ToString())' claudePids=[$($procIds -join ',')]")
     $marginX = [int]($w * 0.1); $marginY = [int]($h * 0.1)
     $innerW = $w - 2 * $marginX; $innerH = $h - 2 * $marginY
     if ($innerW -le 0 -or $innerH -le 0) { [Console]::Error.WriteLine("MULTI-OCCL: invalid inner size"); return $false }
 
-    $anyClaudeVisible = $false; $belowCount = 0; $aboveCount = 0
+    $samplePoints = @()
+    # Interior grid: 5 columns x 4 rows = 20 points
     for ($c = 0; $c -lt 5; $c++) {
         for ($r = 0; $r -lt 4; $r++) {
             $x = $tL + $marginX + [int]($innerW * $c / 4)
             $y = $tT + $marginY + [int]($innerH * $r / 3)
-            $topHwnd = [Win32]::WindowFromPoint($x, $y)
-            if ($topHwnd -eq [IntPtr]::Zero) { [Console]::Error.WriteLine("  [$x,$y] → hwnd=0 (skip)"); continue }
-            $rootHwnd = [Win32]::GetAncestor($topHwnd, 2)  # GA_ROOT = 2
-
-            # Check if this point shows Claude itself → visible at this point
-            $winPid = [uint32]0
-            [Win32]::GetWindowThreadProcessId($rootHwnd, [ref]$winPid) | Out-Null
-            if ($rootHwnd -eq $hwnd -or $procIds -contains [int]$winPid) {
-                [Console]::Error.WriteLine("  [$x,$y] → Claude itself (visible)")
-                $anyClaudeVisible = $true; continue
-            }
-
-            # Z-order verification: is this window ABOVE Claude?
-            $isAbove = $false
-            $z = [Win32]::GetWindow($hwnd, 3)
-            while ($z -ne [IntPtr]::Zero) {
-                if ($z -eq $rootHwnd) { $isAbove = $true; break }
-                $z = [Win32]::GetWindow($z, 3)
-            }
-
-            if (-not $isAbove) {
-                # WindowFromPoint returned BELOW (DPI issue): check known above-overlap windows
-                $coveredByAbove = $false
-                foreach ($w in $aboveOverlapWindows) {
-                    if ($x -ge $w.left -and $x -lt $w.right -and $y -ge $w.top -and $y -lt $w.bottom) {
-                        [Console]::Error.WriteLine("  [$x,$y] → covered by known above window: name=$($w.name) title='$($w.title)' rect=($($w.left),$($w.top),$($w.right),$($w.bottom))")
-                        $coveredByAbove = $true; break
-                    }
-                }
-                if ($coveredByAbove) {
-                    $aboveCount++
-                } else {
-                    $belowCount++
-                    [Console]::Error.WriteLine("  [$x,$y] → NOT covered by any above window (below Claude)")
-                }
-                continue
-            }
-
-            # Window is ABOVE Claude: log detailed info for occlusion analysis
-            $coverName = (Get-Process -Id $winPid -ErrorAction SilentlyContinue).ProcessName
-            $coverTitle = New-Object System.Text.StringBuilder 256
-            [Win32]::GetWindowText($rootHwnd, $coverTitle, 256) | Out-Null
-            $coverRect = New-Object RECT
-            [Win32]::GetWindowRect($rootHwnd, [ref]$coverRect) | Out-Null
-            $pointInRect = ($x -ge $coverRect.Left -and $x -lt $coverRect.Right -and $y -ge $coverRect.Top -and $y -lt $coverRect.Bottom)
-            [Console]::Error.WriteLine("  [$x,$y] → ABOVE: name=$coverName title='$($coverTitle.ToString())' rect=($($coverRect.Left),$($coverRect.Top),$($coverRect.Right),$($coverRect.Bottom)) pointInRect=$pointInRect")
-            $aboveCount++
+            $samplePoints += @($x, $y)
         }
+    }
+    # Edge points: 5 per edge = 20 points, inset 1px
+    for ($i = 0; $i -lt 5; $i++) {
+        $xi = $tL + 1 + [int](($w - 2) * $i / 4)
+        $yi = $tT + 1 + [int](($h - 2) * $i / 4)
+        # Pre-compute edge coordinates to avoid parsing issues in @()
+        $topY = $tT + 1; $rightX = $tR - 1
+        $bottomY = $tB - 1; $leftX = $tL + 1
+        $samplePoints += @($xi, $topY)         # top edge
+        $samplePoints += @($rightX, $yi)       # right edge
+        $samplePoints += @($xi, $bottomY)      # bottom edge
+        $samplePoints += @($leftX, $yi)        # left edge
+    }
+
+    $anyClaudeVisible = $false; $belowCount = 0; $aboveCount = 0
+    for ($p = 0; $p -lt $samplePoints.Count; $p += 2) {
+        $x = $samplePoints[$p]; $y = $samplePoints[$p+1]
+        $topHwnd = [Win32]::WindowFromPoint($x, $y)
+        if ($topHwnd -eq [IntPtr]::Zero) { [Console]::Error.WriteLine("  [$x,$y] → hwnd=0 (skip)"); continue }
+        $rootHwnd = [Win32]::GetAncestor($topHwnd, 2)  # GA_ROOT = 2
+
+        # Check if this point shows Claude itself → visible at this point
+        $winPid = [uint32]0
+        [Win32]::GetWindowThreadProcessId($rootHwnd, [ref]$winPid) | Out-Null
+        if ($rootHwnd -eq $hwnd -or $procIds -contains [int]$winPid) {
+            [Console]::Error.WriteLine("  [$x,$y] → Claude itself (visible)")
+            $anyClaudeVisible = $true; continue
+        }
+
+        # Z-order verification: is this window ABOVE Claude?
+        $isAbove = $false
+        $z = [Win32]::GetWindow($hwnd, 3)
+        while ($z -ne [IntPtr]::Zero) {
+            if ($z -eq $rootHwnd) { $isAbove = $true; break }
+            $z = [Win32]::GetWindow($z, 3)
+        }
+
+        if (-not $isAbove) {
+            # WindowFromPoint returned BELOW: check known above-overlap windows
+            $coveredByAbove = $false
+            foreach ($w in $aboveOverlapWindows) {
+                if ($x -ge $w.left -and $x -lt $w.right -and $y -ge $w.top -and $y -lt $w.bottom) {
+                    [Console]::Error.WriteLine("  [$x,$y] → covered by known above window: name=$($w.name) title='$($w.title)' rect=($($w.left),$($w.top),$($w.right),$($w.bottom))")
+                    $coveredByAbove = $true; break
+                }
+            }
+            if ($coveredByAbove) {
+                $aboveCount++
+            } else {
+                $belowCount++
+                [Console]::Error.WriteLine("  [$x,$y] → NOT covered by any above window (below Claude)")
+            }
+            continue
+        }
+
+        # Window is ABOVE Claude: log detailed info for occlusion analysis
+        $coverName = (Get-Process -Id $winPid -ErrorAction SilentlyContinue).ProcessName
+        $coverTitle = New-Object System.Text.StringBuilder 256
+        [Win32]::GetWindowText($rootHwnd, $coverTitle, 256) | Out-Null
+        $coverRect = New-Object RECT
+        [Win32]::GetWindowRect($rootHwnd, [ref]$coverRect) | Out-Null
+        $pointInRect = ($x -ge $coverRect.Left -and $x -lt $coverRect.Right -and $y -ge $coverRect.Top -and $y -lt $coverRect.Bottom)
+        [Console]::Error.WriteLine("  [$x,$y] → ABOVE: name=$coverName title='$($coverTitle.ToString())' rect=($($coverRect.Left),$($coverRect.Top),$($coverRect.Right),$($coverRect.Bottom)) pointInRect=$pointInRect")
+        $aboveCount++
     }
     [Console]::Error.WriteLine("  ==> above=$aboveCount below=$belowCount claudeVisible=$anyClaudeVisible")
     if ($anyClaudeVisible) { [Console]::Error.WriteLine("  ==> decision: NOT occluded (Claude visible at some point)"); return $false }
