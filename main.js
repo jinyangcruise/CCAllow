@@ -219,9 +219,13 @@ function parseVersion(v) {
 
 function getLatestRelease() {
     return new Promise((resolve, reject) => {
-        https.get(`https://api.github.com/repos/${GH_REPO}/releases/latest`, {
+        const options = {
+            hostname: 'api.github.com',
+            path: `/repos/${GH_REPO}/releases/latest`,
             headers: { 'User-Agent': 'CCAllow' },
-        }, (res) => {
+            rejectUnauthorized: false,
+        };
+        https.get(options, (res) => {
             let data = '';
             res.on('data', (chunk) => data += chunk);
             res.on('end', () => {
@@ -263,7 +267,8 @@ ipcMain.handle('download-update', async (_e, url) => {
     downloadPath = dest;
     const file = fs.createWriteStream(dest);
     await new Promise((resolve, reject) => {
-        https.get(url, (res) => {
+        const u = new URL(url);
+        https.get({ hostname: u.hostname, path: u.pathname, rejectUnauthorized: false }, (res) => {
             const total = parseInt(res.headers['content-length'] || '0', 10);
             let downloaded = 0;
             res.on('data', (chunk) => { downloaded += chunk.length; file.write(chunk); });
