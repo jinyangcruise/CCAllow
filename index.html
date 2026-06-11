@@ -85,6 +85,7 @@ h1{font-size:20px;color:#1d1d1f}
     <div style="display:flex;align-items:center;gap:8px">
         <h1>CC Allow</h1>
         <span id="verBadge" style="font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid #e5e5e7">v0.0.0</span>
+        <button id="upgradeBtn" style="display:none;font-size:11px;background:#4f46e5;color:#fff;border:none;padding:2px 10px;border-radius:4px;cursor:pointer">Upgrade</button>
     </div>
     <div style="display:flex;gap:4px">
         <button id="themeBtn">☀️</button>
@@ -170,6 +171,8 @@ h1{font-size:20px;color:#1d1d1f}
     <span data-i18n="footer">通过 Windows UI Automation 工作</span>
     <span style="margin:0 6px">·</span>
     <a href="#" id="githubLink" style="color:inherit;text-decoration:none">GitHub</a>
+    <span style="margin:0 6px">·</span>
+    <a href="#" id="checkUpdateLink" style="color:inherit;text-decoration:none" data-i18n="checkUpdate">检查更新</a>
 </div>
 
 <script src="locales.js"></script>
@@ -344,6 +347,47 @@ document.getElementById('copyLog').addEventListener('click', function() {
 document.getElementById('githubLink').addEventListener('click', function(e) {
     e.preventDefault();
     window.ccallow.openUrl('https://github.com/jinyangcruise/CCAllow');
+});
+
+var upgradeBtn = document.getElementById('upgradeBtn');
+var checkUpdateLink = document.getElementById('checkUpdateLink');
+
+window.ccallow.onUpdateAvailable(function(data) {
+    upgradeBtn.style.display = 'inline-block';
+    upgradeBtn.dataset.url = data.downloadUrl || '';
+    log(t('updateAvailable') + ' ' + data.latestVer);
+});
+
+upgradeBtn.addEventListener('click', async function() {
+    upgradeBtn.textContent = t('downloading');
+    upgradeBtn.disabled = true;
+    try {
+        var result = await window.ccallow.downloadUpdate(upgradeBtn.dataset.url);
+        log(t('downloadComplete'));
+        var install = confirm(t('installPrompt'));
+        if (install) {
+            await window.ccallow.installUpdate();
+            log(t('installStarted'));
+        }
+    } catch (err) {
+        log(t('downloadFailed') + ': ' + err.message);
+        upgradeBtn.textContent = 'Upgrade';
+        upgradeBtn.disabled = false;
+    }
+});
+
+checkUpdateLink.addEventListener('click', async function(e) {
+    e.preventDefault();
+    checkUpdateLink.textContent = t('checking');
+    var result = await window.ccallow.checkUpdate();
+    if (result.hasUpdate) {
+        upgradeBtn.style.display = 'inline-block';
+        upgradeBtn.dataset.url = result.downloadUrl || '';
+        log(t('updateAvailable') + ' ' + result.latestVer);
+    } else {
+        log(result.error ? t('checkFailed') + ': ' + result.error : t('upToDate'));
+    }
+    checkUpdateLink.textContent = t('checkUpdate');
 });
 </script>
 

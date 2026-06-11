@@ -2,7 +2,9 @@ const { app, BrowserWindow, ipcMain, Tray, Menu, shell } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
 
+const GH_REPO = 'jinyangcruise/CCAllow';
 const assetsDir = path.join(__dirname, 'assets');
 const iconPath = path.join(assetsDir, 'icon.png');
 const trayIconPath = path.join(assetsDir, 'tray-icon.png');
@@ -206,6 +208,79 @@ ipcMain.handle('set-minimized-interval', (_e, interval) => {
 
 ipcMain.handle('open-url', (_e, url) => { shell.openExternal(url); return true; });
 
+// ── update ──
+const currentVersion = require('./package.json').version;
+let downloadPath = null;
+
+function parseVersion(v) {
+    const parts = v.replace(/^v/, '').split('.').map(Number);
+    return parts[0] * 10000 + parts[1] * 100 + parts[2];
+}
+
+function getLatestRelease() {
+    return new Promise((resolve, reject) => {
+        https.get(`https://api.github.com/repos/${GH_REPO}/releases/latest`, {
+            headers: { 'User-Agent': 'CCAllow' },
+        }, (res) => {
+            let data = '';
+            res.on('data', (chunk) => data += chunk);
+            res.on('end', () => {
+                try {
+                    const j = JSON.parse(data);
+                    const tag = j.tag_name || '';
+                    const assets = j.assets || [];
+                    const exe = assets.find(a => a.name.endsWith('.exe') && !a.name.endsWith('.exe.blockmap'));
+                    resolve({ tag, downloadUrl: exe ? exe.browser_download_url : null, name: exe ? exe.name : null });
+                } catch { reject(new Error('parse failed')); }
+            });
+        }).on('error', reject);
+    });
+}
+
+ipcMain.handle('check-update', async () => {
+    try {
+        const release = await getLatestRelease();
+        const latestVer = release.tag.replace(/^v/, '');
+        const hasUpdate = parseVersion(latestVer) > parseVersion(currentVersion);
+        return { hasUpdate, latestVer: release.tag, downloadUrl: release.downloadUrl, exeName: release.name };
+    } catch (err) {
+        return { hasUpdate: false, latestVer: '', downloadUrl: null, error: err.message };
+    }
+});
+
+ipcMain.handle('get-check-updates', () => {
+    const cfg = getConfig();
+    return { enabled: cfg.checkUpdates !== false };
+});
+
+ipcMain.handle('set-check-updates', (_e, enabled) => {
+    saveConfig({ checkUpdates: enabled });
+    return { enabled };
+});
+
+ipcMain.handle('download-update', async (_e, url) => {
+    const dest = path.join(app.getPath('temp'), path.basename(url));
+    downloadPath = dest;
+    const file = fs.createWriteStream(dest);
+    await new Promise((resolve, reject) => {
+        https.get(url, (res) => {
+            const total = parseInt(res.headers['content-length'] || '0', 10);
+            let downloaded = 0;
+            res.on('data', (chunk) => { downloaded += chunk.length; file.write(chunk); });
+            res.on('end', () => { file.end(); resolve(); });
+        }).on('error', reject);
+    });
+    return { path: dest };
+});
+
+ipcMain.handle('install-update', () => {
+    if (downloadPath && fs.existsSync(downloadPath)) {
+        shell.openPath(downloadPath);
+        return { success: true };
+    }
+    return { success: false, error: 'no downloaded file' };
+});
+
 app.isQuitting = false;
 app.on('before-quit', () => { app.isQuitting = true; stopMonitor(); });
 app.whenReady().then(() => {
@@ -216,5 +291,14 @@ app.whenReady().then(() => {
     createWindow();
     createTray();
     if (cfg.silentStart === true) mainWindow.hide();
+    // Auto-check updates
+    if (cfg.checkUpdates !== false) {
+        getLatestRelease().then(release => {
+            const latestVer = release.tag.replace(/^v/, '');
+            if (parseVersion(latestVer) > parseVersion(currentVersion) && mainWindow) {
+                mainWindow.webContents.send('update-available', { hasUpdate: true, latestVer: release.tag, downloadUrl: release.downloadUrl, exeName: release.name });
+            }
+        }).catch(() => {});
+    }
 });
 app.on('window-all-closed', () => {});

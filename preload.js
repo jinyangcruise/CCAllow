@@ -19,6 +19,12 @@ contextBridge.exposeInMainWorld('ccallow', {
     setMinimizeAfterAllow: (v) => ipcRenderer.invoke('set-minimize-after-allow', v),
     getLanguage: () => ipcRenderer.invoke('get-language'),
     setLanguage: (v) => ipcRenderer.invoke('set-language', v),
+    checkUpdate: () => ipcRenderer.invoke('check-update'),
+    getCheckUpdates: () => ipcRenderer.invoke('get-check-updates'),
+    setCheckUpdates: (v) => ipcRenderer.invoke('set-check-updates', v),
+    downloadUpdate: (url) => ipcRenderer.invoke('download-update', url),
+    installUpdate: () => ipcRenderer.invoke('install-update'),
     onTrayToggle: (cb) => ipcRenderer.on('tray-toggle', () => cb()),
     onMonitorLog: (cb) => ipcRenderer.on('monitor-log', (_e, msg) => cb(msg)),
+    onUpdateAvailable: (cb) => ipcRenderer.on('update-available', (_e, data) => cb(data)),
 });
