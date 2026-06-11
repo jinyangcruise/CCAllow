@@ -48,7 +48,7 @@ const locales = {
         interval: 'Poll interval',
         intervalHint: 'Lower = faster response but more frequent flashes. Recommended 2–3s.',
         autoStart: 'Auto start on boot',
-        autoStartDesc: 'Launch CCAAllow on system startup',
+        autoStartDesc: 'Launch CC Allow on system startup',
         silentStart: 'Silent start',
         silentStartDesc: 'Start without showing the main window, only tray icon',
         statusIdle: 'Ready',
