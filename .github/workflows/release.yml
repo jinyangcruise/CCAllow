@@ -15,15 +15,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
+        run: npm install
         env:
           NODE_TLS_REJECT_UNAUTHORIZED: 0
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+
+      - name: Build installer
+        run: npx electron-builder --win --x64 --publish never
+        env:
+          NODE_TLS_REJECT_UNAUTHORIZED: 0
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: List build output
         run: Get-ChildItem -Recurse dist
@@ -31,6 +34,9 @@ jobs:
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: dist/**/*.exe
+          files: |
+            dist/**/*.exe
+            dist/**/*.msi
+            dist/**/*.blockmap
           draft: true
           generate_release_notes: true
