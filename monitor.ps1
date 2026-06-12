@@ -108,7 +108,7 @@ function IsWindowFullyOccluded($hwnd, $procIds) {
     $screenW = [Win32]::GetSystemMetrics(0)
     $screenH = [Win32]::GetSystemMetrics(1)
     
-    [Console]::Error.WriteLine("[dbg] IsWindowFullyOccluded: claudeRect=($($targetRect.Left),$($targetRect.Top),$($targetRect.Right),$($targetRect.Bottom)) screen=${screenW}x${screenH}")
+    # [Console]::Error.WriteLine("[dbg] IsWindowFullyOccluded: claudeRect=($($targetRect.Left),$($targetRect.Top),$($targetRect.Right),$($targetRect.Bottom)) screen=${screenW}x${screenH}")
     
     # Create Claude window region, then subtract each above window
     $claudeRgn = [Win32]::CreateRectRgn($targetRect.Left, $targetRect.Top, $targetRect.Right, $targetRect.Bottom)
@@ -134,7 +134,7 @@ function IsWindowFullyOccluded($hwnd, $procIds) {
                             $reasonableSize = $aw -le $screenW -and $ah -le $screenH
                             
                             $aboveName = (Get-Process -Id $winPid -ErrorAction SilentlyContinue).ProcessName
-                            [Console]::Error.WriteLine("[dbg]   above: pid=$winPid name=$aboveName rect=($($aboveRect.Left),$($aboveRect.Top),$($aboveRect.Right),$($aboveRect.Bottom)) onScreen=$partiallyOnScreen reasonable=$reasonableSize")
+                            # [Console]::Error.WriteLine("[dbg]   above: pid=$winPid name=$aboveName rect=($($aboveRect.Left),$($aboveRect.Top),$($aboveRect.Right),$($aboveRect.Bottom)) onScreen=$partiallyOnScreen reasonable=$reasonableSize")
                             
                             if ($aw -gt 0 -and $ah -gt 0 -and $partiallyOnScreen -and $reasonableSize -and
                                 $aboveRect.Left -lt $targetRect.Right -and $aboveRect.Right -gt $targetRect.Left -and
@@ -148,9 +148,9 @@ function IsWindowFullyOccluded($hwnd, $procIds) {
                                     $boxRect = New-Object RECT
                                     $rgnType = [Win32]::GetRgnBox($claudeRgn, [ref]$boxRect)
                                     # [Console]::Error.WriteLine("[dbg]   after subtract: rgnType=$rgnType")
-                                    if ($rgnType -eq 1) { 
-                                        [Console]::Error.WriteLine("[dbg]   fully occluded!")
-                                        return $true
+                                   if ($rgnType -eq 1) { 
+                                        # [Console]::Error.WriteLine("[dbg]   fully occluded!")
+                                       return $true
                                     }
                                 }
                             }
@@ -164,8 +164,8 @@ function IsWindowFullyOccluded($hwnd, $procIds) {
         [Win32]::DeleteObject($claudeRgn) | Out-Null
     }
     
-    [Console]::Error.WriteLine("[dbg]   result: not fully occluded")
-    [Console]::Error.Flush()
+    # [Console]::Error.WriteLine("[dbg]   result: not fully occluded")
+   [Console]::Error.Flush()
     return $false
 }
 function ClickButton($btn, $procId) {
@@ -309,8 +309,8 @@ while ($running) {
         ForEach-Object { $_.Id })
 
 
-    [Console]::Error.WriteLine("[dbg] state: isMin=$isMin minimizedPolling=$minimizedPolling")
-    if (-not $isMin) {
+    # [Console]::Error.WriteLine("[dbg] state: isMin=$isMin minimizedPolling=$minimizedPolling")
+   if (-not $isMin) {
         try {
             $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
             $btn = FindAllowButton $root
@@ -330,8 +330,8 @@ while ($running) {
             if ($result) {
                 # Write-Output "  [dbg] OCCLUDED → peek"
 
-                [Console]::Error.WriteLine("[dbg] occluded=true, calling PeekOccluded")
-                if (PeekOccluded $hwnd $p.Id) { continue }
+                # [Console]::Error.WriteLine("[dbg] occluded=true, calling PeekOccluded")
+               if (PeekOccluded $hwnd $p.Id) { continue }
             } else {
                 # Write-Output "  [dbg] NOT occluded"
             }
@@ -345,12 +345,12 @@ while ($running) {
         continue
     }
 
-    # Claude IS minimized
-    [Console]::Error.WriteLine("[dbg] window minimized, minimizedPolling=$minimizedPolling")
-    # Write-Output "  [dbg] minimized, polling=$minimizedPolling"
-    if ($minimizedPolling) {
-        [Console]::Error.WriteLine("[dbg] minimized, calling PeekAndScan")
-        if (PeekAndScan $hwnd $p.Id) { continue }
+   # Claude IS minimized
+    # [Console]::Error.WriteLine("[dbg] window minimized, minimizedPolling=$minimizedPolling")
+   # Write-Output "  [dbg] minimized, polling=$minimizedPolling"
+   if ($minimizedPolling) {
+        # [Console]::Error.WriteLine("[dbg] minimized, calling PeekAndScan")
+       if (PeekAndScan $hwnd $p.Id) { continue }
         Start-Sleep -Milliseconds $peekInterval
     } else {
         Start-Sleep -Milliseconds 1000
