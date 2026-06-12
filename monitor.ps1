@@ -296,19 +296,19 @@ function PeekAndScan($hwnd, $procId) {
     try {
         $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
         if ($btn) {
-            EnableAnim $hwnd
-            $savedWp.showCmd = 4
-            [Win32]::SetWindowPlacement($hwnd, [ref]$savedWp) | Out-Null
             ClickButton $btn $procId | Out-Null
             if ($script:minimizeAfterAllow) {
                 $savedWp.showCmd = 6  # SW_MINIMIZE
                 [Win32]::SetWindowPlacement($hwnd, [ref]$savedWp) | Out-Null
+                EnableAnim $hwnd
+            } else {
+                EnableAnim $hwnd
+                $savedWp.showCmd = 4  # SW_SHOWNOACTIVATE
+                [Win32]::SetWindowPlacement($hwnd, [ref]$savedWp) | Out-Null
             }
-            EnableAnim $hwnd
             return $true
         }
     } catch { }
-    EnableAnim $hwnd
     # Restore: save original position but minimize the window
     # When user clicks taskbar icon, it will restore to original position
     $savedWp.showCmd = 2  # SW_SHOWMINIMIZED
