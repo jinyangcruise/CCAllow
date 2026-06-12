@@ -59,18 +59,50 @@ function createTray() {
     tray.on('click', () => { mainWindow.isVisible() ? mainWindow.focus() : (mainWindow.show(), mainWindow.focus()); });
 }
 
+const trayLabels = {
+    zh: { show: '显示 CC Allow', start: '开始监控', stop: '停止监控', bringClaude: '找回Claude窗口', exit: '退出' },
+    en: { show: 'Show CC Allow', start: 'Start Monitoring', stop: 'Stop Monitoring', bringClaude: 'Bring Claude to Front', exit: 'Exit' }
+};
+
 function rebuildTrayMenu() {
     if (!tray) return;
+    const lang = (getConfig().language || 'zh') === 'zh' ? 'zh' : 'en';
+    const L = trayLabels[lang];
     const tmpl = [
-        { label: 'Show CCAAllow', click: () => { mainWindow.show(); mainWindow.focus(); } },
+        { label: L.show, click: () => { mainWindow.show(); mainWindow.focus(); } },
         { type: 'separator' },
         monitorEnabled
-            ? { label: 'Stop Monitoring', click: () => mainWindow.webContents.send('tray-toggle') }
-            : { label: 'Start Monitoring', click: () => mainWindow.webContents.send('tray-toggle') },
+            ? { label: L.stop, click: () => mainWindow.webContents.send('tray-toggle') }
+            : { label: L.start, click: () => mainWindow.webContents.send('tray-toggle') },
+        { label: L.bringClaude, click: () => { bringClaudeToCenter(); } },
         { type: 'separator' },
-        { label: 'Exit', click: () => { app.isQuitting = true; app.quit(); } },
+        { label: L.exit, click: () => { app.isQuitting = true; app.quit(); } },
     ];
     tray.setContextMenu(Menu.buildFromTemplate(tmpl));
+}
+
+function bringClaudeToCenter() {
+    const ps = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `
+$p = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match 'claude' -and $_.MainWindowHandle -ne 0 }
+if (-not $p) { exit }
+$h = $p[0].MainWindowHandle
+Add-Type @"
+using System; using System.Runtime.InteropServices;
+public class W {
+    [DllImport("user32.dll")] public static extern int GetSystemMetrics(int n);
+    [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr ha, int x, int y, int cx, int cy, uint f);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
+}
+"@
+$sw = [W]::GetSystemMetrics(0); $sh = [W]::GetSystemMetrics(1)
+$x = [Math]::Max(0, [int](($sw - 1200) / 2))
+$y = [Math]::Max(0, [int](($sh - 800) / 2))
+[W]::ShowWindow($h, 9)
+[W]::SetWindowPos($h, [IntPtr]::Zero, $x, $y, 1200, 800, 0x0040)
+[W]::SetForegroundWindow($h)
+`], { stdio: 'ignore' });
+    ps.unref();
 }
 
 function startMonitor() {
@@ -192,6 +224,7 @@ ipcMain.handle('get-language', () => {
 
 ipcMain.handle('set-language', (_e, lang) => {
     saveConfig({ language: lang });
+    tray && rebuildTrayMenu();
     return { lang };
 });
 
