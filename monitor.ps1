@@ -296,7 +296,9 @@ function PeekAndScan($hwnd, $procId) {
     try {
         $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
         if ($btn) {
+            Write-Output "Allow button detected (peek)"
             ClickButton $btn $procId | Out-Null
+            Write-Output "Allow request processed"
             if ($script:minimizeAfterAllow) {
                 $savedWp.showCmd = 6  # SW_MINIMIZE
                 [Win32]::SetWindowPlacement($hwnd, [ref]$savedWp) | Out-Null
@@ -331,10 +333,12 @@ function PeekOccluded($hwnd, $procId) {
     try {
         $btn = FindAllowButton ([System.Windows.Automation.AutomationElement]::FromHandle($hwnd))
         if ($btn) {
+            Write-Output "Allow button detected (occluded)"
             # Move back before clicking
             [Win32]::SetWindowPos($hwnd, [IntPtr]::Zero, $origRect.Left, $origRect.Top, $pw, $ph, 0x0014)
             EnableAnim $hwnd
             ClickButton $btn $procId | Out-Null
+            Write-Output "Allow request processed"
             return $true
         }
     } catch { }
@@ -377,7 +381,12 @@ while ($running) {
         try {
             $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
             $btn = FindAllowButton $root
-            if ($btn) { ClickButton $btn $p.Id; continue }
+            if ($btn) {
+                Write-Output "Allow button detected"
+                ClickButton $btn $p.Id
+                Write-Output "Allow request processed"
+                continue
+            }
         } catch { Write-Output "  check err: $_" }
 
         # Window not minimized but button not found → check if fully occluded
