@@ -25,6 +25,11 @@ public class Win32 {
     [DllImport("shcore.dll")] public static extern int SetProcessDpiAwareness(int value);
     [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, IntPtr attrValue, int attrSize);
     [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+    [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
+    [DllImport("gdi32.dll")] public static extern IntPtr CreateRectRgn(int nLeftRect, int nTopRect, int nRightRect, int nBottomRect);
+    [DllImport("gdi32.dll")] public static extern int CombineRgn(IntPtr hrgnDest, IntPtr hrgnSrc1, IntPtr hrgnSrc2, int fnCombineMode);
+    [DllImport("gdi32.dll")] public static extern int GetRgnBox(IntPtr hrgn, out RECT lprc);
+    [DllImport("gdi32.dll")] public static extern bool DeleteObject(IntPtr hObject);
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -94,148 +99,75 @@ function FindAllowButton($root) {
 function IsWindowFullyOccluded($hwnd, $procIds) {
     $targetRect = New-Object RECT
     if (-not [Win32]::GetWindowRect($hwnd, [ref]$targetRect)) { return $false }
-    $tL = $targetRect.Left; $tT = $targetRect.Top
-    $tR = $targetRect.Right; $tB = $targetRect.Bottom
-    if ($tR -le $tL -or $tB -le $tT) { return $false }
-
-    # Collect windows above Claude that overlap Claude rect (for multi-window fallback)
-    $aboveOverlapWindows = @()
-
-    # Walk Z-order upward from Claude's window
-    $current = [Win32]::GetWindow($hwnd, 3)  # GW_HWNDPREV = 3
-    while ($current -ne [IntPtr]::Zero) {
-        if ([Win32]::IsWindowVisible($current) -and -not [Win32]::IsIconic($current)) {
-            $r = New-Object RECT
-            if ([Win32]::GetWindowRect($current, [ref]$r)) {
+    
+    $w = $targetRect.Right - $targetRect.Left
+    $h = $targetRect.Bottom - $targetRect.Top
+    if ($w -le 0 -or $h -le 0) { return $false }
+    
+    # Get screen dimensions to filter out off-screen or oversized windows
+    $screenW = [Win32]::GetSystemMetrics(0)
+    $screenH = [Win32]::GetSystemMetrics(1)
+    
+    [Console]::Error.WriteLine("[dbg] IsWindowFullyOccluded: claudeRect=($($targetRect.Left),$($targetRect.Top),$($targetRect.Right),$($targetRect.Bottom)) screen=${screenW}x${screenH}")
+    
+    # Create Claude window region, then subtract each above window
+    $claudeRgn = [Win32]::CreateRectRgn($targetRect.Left, $targetRect.Top, $targetRect.Right, $targetRect.Bottom)
+    if ($claudeRgn -eq [IntPtr]::Zero) { return $false }
+    
+    try {
+        $current = [Win32]::GetWindow($hwnd, 3)  # GW_HWNDPREV
+        while ($current -ne [IntPtr]::Zero) {
+            if ([Win32]::IsWindowVisible($current) -and -not [Win32]::IsIconic($current)) {
                 $winPid = [uint32]0
                 [Win32]::GetWindowThreadProcessId($current, [ref]$winPid) | Out-Null
-                $zName = (Get-Process -Id $winPid -ErrorAction SilentlyContinue).ProcessName
-                $zTitle = New-Object System.Text.StringBuilder 256
-                [Win32]::GetWindowText($current, $zTitle, 256) | Out-Null
-                $covers = ($r.Left -le $tL -and $r.Top -le $tT -and $r.Right -ge $tR -and $r.Bottom -ge $tB)
-                # [Console]::Error.WriteLine("Z-ABOVE: pid=$winPid name=$zName title='$($zTitle.ToString())' rect=($($r.Left),$($r.Top),$($r.Right),$($r.Bottom)) covers=$covers isClaude=$($procIds -contains [int]$winPid)")
-
-                if ($covers) {
-                    if ($procIds -contains [int]$winPid) { $current = [Win32]::GetWindow($current, 3); continue }
-
-                    $fg = [Win32]::GetForegroundWindow()
-                    if ($current -eq $fg) {
-                        # [Console]::Error.WriteLine("Z-ABOVE ==> FOREGROUND, COVERED")
-                        return $true  # Covered by the active foreground window
+                if (-not ($procIds -contains [int]$winPid)) {
+                    $cloaked = 0
+                    [Win32]::DwmGetWindowAttribute($current, 14, [ref]$cloaked, 4) | Out-Null
+                    if ($cloaked -eq 0) {
+                        $aboveRect = New-Object RECT
+                        if ([Win32]::GetWindowRect($current, [ref]$aboveRect)) {
+                            $aw = $aboveRect.Right - $aboveRect.Left
+                            $ah = $aboveRect.Bottom - $aboveRect.Top
+                            
+                            $partiallyOnScreen = $aboveRect.Left -lt $screenW -and $aboveRect.Right -gt 0 -and
+                                                   $aboveRect.Top -lt $screenH -and $aboveRect.Bottom -gt 0
+                            $reasonableSize = $aw -le $screenW -and $ah -le $screenH
+                            
+                            $aboveName = (Get-Process -Id $winPid -ErrorAction SilentlyContinue).ProcessName
+                            [Console]::Error.WriteLine("[dbg]   above: pid=$winPid name=$aboveName rect=($($aboveRect.Left),$($aboveRect.Top),$($aboveRect.Right),$($aboveRect.Bottom)) onScreen=$partiallyOnScreen reasonable=$reasonableSize")
+                            
+                            if ($aw -gt 0 -and $ah -gt 0 -and $partiallyOnScreen -and $reasonableSize -and
+                                $aboveRect.Left -lt $targetRect.Right -and $aboveRect.Right -gt $targetRect.Left -and
+                                $aboveRect.Top -lt $targetRect.Bottom -and $aboveRect.Bottom -gt $targetRect.Top) {
+                                $aboveRgn = [Win32]::CreateRectRgn($aboveRect.Left, $aboveRect.Top, $aboveRect.Right, $aboveRect.Bottom)
+                                if ($aboveRgn -ne [IntPtr]::Zero) {
+                                    [Console]::Error.WriteLine("[dbg]   subtracting: pid=$winPid name=$aboveName")
+                                    [Win32]::CombineRgn($claudeRgn, $claudeRgn, $aboveRgn, 4) | Out-Null
+                                    [Win32]::DeleteObject($aboveRgn) | Out-Null
+                                    
+                                    $boxRect = New-Object RECT
+                                    $rgnType = [Win32]::GetRgnBox($claudeRgn, [ref]$boxRect)
+                                    [Console]::Error.WriteLine("[dbg]   after subtract: rgnType=$rgnType")
+                                    if ($rgnType -eq 1) { 
+                                        [Console]::Error.WriteLine("[dbg]   fully occluded!")
+                                        return $true
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-
-                # Collect overlapping windows for multi-window occlusion fallback
-                if (-not ($procIds -contains [int]$winPid) -and
-                    $r.Left -lt $tR -and $r.Right -gt $tL -and $r.Top -lt $tB -and $r.Bottom -gt $tT) {
-                    $ow = $r.Right - $r.Left; $oh = $r.Bottom - $r.Top
-                    if ($ow -ge 50 -and $oh -ge 50) {
-                        $aboveOverlapWindows += @{left=$r.Left; top=$r.Top; right=$r.Right; bottom=$r.Bottom; name=$zName; title=$zTitle.ToString()}
-                    }
-                }
             }
+            $current = [Win32]::GetWindow($current, 3)
         }
-        $current = [Win32]::GetWindow($current, 3)
+    } finally {
+        [Win32]::DeleteObject($claudeRgn) | Out-Null
     }
-
-    # Fallback: multi-window occlusion detection via pixel sampling
-    # Only check when Claude is NOT the foreground window (user is working elsewhere)
-    $fg = [Win32]::GetForegroundWindow()
-    if ($fg -eq $hwnd) { return $false }
-
-    # Debug: log Claude window info and foreground info
-    $fgTitle = New-Object System.Text.StringBuilder 256
-    [Win32]::GetWindowText($fg, $fgTitle, 256) | Out-Null
-    $fgPid = [uint32]0
-    [Win32]::GetWindowThreadProcessId($fg, [ref]$fgPid) | Out-Null
-    $fgName = (Get-Process -Id $fgPid -ErrorAction SilentlyContinue).ProcessName
-    # 40 sample points: 20 interior (5x4 grid, 10% inset) + 20 on edges
-    $w = $tR - $tL; $h = $tB - $tT
-    # [Console]::Error.WriteLine("MULTI-OCCL: claudeRect=($tL,$tT,$tR,$tB) sz=${w}x${h} fgPid=$fgPid fgName=$fgName fgTitle='$($fgTitle.ToString())' claudePids=[$($procIds -join ',')]")
-    $marginX = [int]($w * 0.1); $marginY = [int]($h * 0.1)
-    $innerW = $w - 2 * $marginX; $innerH = $h - 2 * $marginY
-    if ($innerW -le 0 -or $innerH -le 0) { return $false }  # [Console]::Error.WriteLine("MULTI-OCCL: invalid inner size")
-
-    $samplePoints = @()
-    # Interior grid: 5 columns x 4 rows = 20 points
-    for ($c = 0; $c -lt 5; $c++) {
-        for ($r = 0; $r -lt 4; $r++) {
-            $x = $tL + $marginX + [int]($innerW * $c / 4)
-            $y = $tT + $marginY + [int]($innerH * $r / 3)
-            $samplePoints += @($x, $y)
-        }
-    }
-    # Edge points: 5 per edge = 20 points, inset 1px
-    for ($i = 0; $i -lt 5; $i++) {
-        $xi = $tL + 1 + [int](($w - 2) * $i / 4)
-        $yi = $tT + 1 + [int](($h - 2) * $i / 4)
-        # Pre-compute edge coordinates to avoid parsing issues in @()
-        $topY = $tT + 1; $rightX = $tR - 1
-        $bottomY = $tB - 1; $leftX = $tL + 1
-        $samplePoints += @($xi, $topY)         # top edge
-        $samplePoints += @($rightX, $yi)       # right edge
-        $samplePoints += @($xi, $bottomY)      # bottom edge
-        $samplePoints += @($leftX, $yi)        # left edge
-    }
-
-    $anyClaudeVisible = $false; $belowCount = 0; $aboveCount = 0
-    for ($p = 0; $p -lt $samplePoints.Count; $p += 2) {
-        $x = $samplePoints[$p]; $y = $samplePoints[$p+1]
-        $topHwnd = [Win32]::WindowFromPoint($x, $y)
-        if ($topHwnd -eq [IntPtr]::Zero) { continue }  # [Console]::Error.WriteLine("  [$x,$y] → hwnd=0 (skip)")
-        $rootHwnd = [Win32]::GetAncestor($topHwnd, 2)  # GA_ROOT = 2
-
-        # Check if this point shows Claude itself → visible at this point
-        $winPid = [uint32]0
-        [Win32]::GetWindowThreadProcessId($rootHwnd, [ref]$winPid) | Out-Null
-        if ($rootHwnd -eq $hwnd -or $procIds -contains [int]$winPid) {
-            # [Console]::Error.WriteLine("  [$x,$y] → Claude itself (visible)")
-            $anyClaudeVisible = $true; continue
-        }
-
-        # Z-order verification: is this window ABOVE Claude?
-        $isAbove = $false
-        $z = [Win32]::GetWindow($hwnd, 3)
-        while ($z -ne [IntPtr]::Zero) {
-            if ($z -eq $rootHwnd) { $isAbove = $true; break }
-            $z = [Win32]::GetWindow($z, 3)
-        }
-
-        if (-not $isAbove) {
-            # WindowFromPoint returned BELOW: check known above-overlap windows
-            $coveredByAbove = $false
-            foreach ($w in $aboveOverlapWindows) {
-                if ($x -ge $w.left -and $x -lt $w.right -and $y -ge $w.top -and $y -lt $w.bottom) {
-                    # [Console]::Error.WriteLine("  [$x,$y] → covered by known above window: name=$($w.name) title='$($w.title)' rect=($($w.left),$($w.top),$($w.right),$($w.bottom))")
-                    $coveredByAbove = $true; break
-                }
-            }
-            if ($coveredByAbove) {
-                $aboveCount++
-            } else {
-                $belowCount++
-                # [Console]::Error.WriteLine("  [$x,$y] → NOT covered by any above window (below Claude)")
-            }
-            continue
-        }
-
-        # Window is ABOVE Claude: log detailed info for occlusion analysis
-        $coverName = (Get-Process -Id $winPid -ErrorAction SilentlyContinue).ProcessName
-        $coverTitle = New-Object System.Text.StringBuilder 256
-        [Win32]::GetWindowText($rootHwnd, $coverTitle, 256) | Out-Null
-        $coverRect = New-Object RECT
-        [Win32]::GetWindowRect($rootHwnd, [ref]$coverRect) | Out-Null
-        $pointInRect = ($x -ge $coverRect.Left -and $x -lt $coverRect.Right -and $y -ge $coverRect.Top -and $y -lt $coverRect.Bottom)
-        # [Console]::Error.WriteLine("  [$x,$y] → ABOVE: name=$coverName title='$($coverTitle.ToString())' rect=($($coverRect.Left),$($coverRect.Top),$($coverRect.Right),$($coverRect.Bottom)) pointInRect=$pointInRect")
-        $aboveCount++
-    }
-    # [Console]::Error.WriteLine("  ==> above=$aboveCount below=$belowCount claudeVisible=$anyClaudeVisible")
-    if ($anyClaudeVisible) { return $false }  # [Console]::Error.WriteLine("  ==> decision: NOT occluded (Claude visible at some point)")
-    if ($belowCount -gt 0) { return $false }  # [Console]::Error.WriteLine("  ==> decision: NOT occluded ($belowCount points below Claude)")
-    # [Console]::Error.WriteLine("  ==> decision: OCCLUDED (all $aboveCount points covered by windows above Claude)")
-    return $true
+    
+    [Console]::Error.WriteLine("[dbg]   result: not fully occluded")
+    [Console]::Error.Flush()
+    return $false
 }
-
 function ClickButton($btn, $procId) {
     $name = $btn.Current.Name.Trim()
     Write-Output "found: >>$name<<"
@@ -376,7 +308,8 @@ while ($running) {
         Where-Object { $_.ProcessName -match 'claude' } |
         ForEach-Object { $_.Id })
 
-    # Check Claude window when NOT minimized
+
+    [Console]::Error.WriteLine("[dbg] state: isMin=$isMin minimizedPolling=$minimizedPolling")
     if (-not $isMin) {
         try {
             $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
@@ -392,8 +325,12 @@ while ($running) {
         # Window not minimized but button not found → check if fully occluded
         if ($minimizedPolling) {
             # Write-Output "  [dbg] not-min, polling=ON, checking occlusion..."
-            if (IsWindowFullyOccluded $hwnd $allClaudePids) {
+            $result = IsWindowFullyOccluded $hwnd $allClaudePids
+            Write-Output "isOccluded=[$result]"
+            if ($result) {
                 # Write-Output "  [dbg] OCCLUDED → peek"
+
+                [Console]::Error.WriteLine("[dbg] occluded=true, calling PeekOccluded")
                 if (PeekOccluded $hwnd $p.Id) { continue }
             } else {
                 # Write-Output "  [dbg] NOT occluded"
@@ -409,8 +346,10 @@ while ($running) {
     }
 
     # Claude IS minimized
+    [Console]::Error.WriteLine("[dbg] window minimized, minimizedPolling=$minimizedPolling")
     # Write-Output "  [dbg] minimized, polling=$minimizedPolling"
     if ($minimizedPolling) {
+        [Console]::Error.WriteLine("[dbg] minimized, calling PeekAndScan")
         if (PeekAndScan $hwnd $p.Id) { continue }
         Start-Sleep -Milliseconds $peekInterval
     } else {
