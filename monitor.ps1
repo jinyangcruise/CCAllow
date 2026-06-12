@@ -141,13 +141,13 @@ function IsWindowFullyOccluded($hwnd, $procIds) {
                                 $aboveRect.Top -lt $targetRect.Bottom -and $aboveRect.Bottom -gt $targetRect.Top) {
                                 $aboveRgn = [Win32]::CreateRectRgn($aboveRect.Left, $aboveRect.Top, $aboveRect.Right, $aboveRect.Bottom)
                                 if ($aboveRgn -ne [IntPtr]::Zero) {
-                                    [Console]::Error.WriteLine("[dbg]   subtracting: pid=$winPid name=$aboveName")
+                                    # [Console]::Error.WriteLine("[dbg]   subtracting: pid=$winPid name=$aboveName")
                                     [Win32]::CombineRgn($claudeRgn, $claudeRgn, $aboveRgn, 4) | Out-Null
                                     [Win32]::DeleteObject($aboveRgn) | Out-Null
                                     
                                     $boxRect = New-Object RECT
                                     $rgnType = [Win32]::GetRgnBox($claudeRgn, [ref]$boxRect)
-                                    [Console]::Error.WriteLine("[dbg]   after subtract: rgnType=$rgnType")
+                                    # [Console]::Error.WriteLine("[dbg]   after subtract: rgnType=$rgnType")
                                     if ($rgnType -eq 1) { 
                                         [Console]::Error.WriteLine("[dbg]   fully occluded!")
                                         return $true
@@ -326,7 +326,7 @@ while ($running) {
         if ($minimizedPolling) {
             # Write-Output "  [dbg] not-min, polling=ON, checking occlusion..."
             $result = IsWindowFullyOccluded $hwnd $allClaudePids
-            Write-Output "isOccluded=[$result]"
+            # Write-Output "isOccluded=[$result]"
             if ($result) {
                 # Write-Output "  [dbg] OCCLUDED → peek"
 
