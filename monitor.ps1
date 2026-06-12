@@ -154,7 +154,7 @@ function IsWindowFullyOccluded($hwnd, $procIds) {
     # [Console]::Error.WriteLine("MULTI-OCCL: claudeRect=($tL,$tT,$tR,$tB) sz=${w}x${h} fgPid=$fgPid fgName=$fgName fgTitle='$($fgTitle.ToString())' claudePids=[$($procIds -join ',')]")
     $marginX = [int]($w * 0.1); $marginY = [int]($h * 0.1)
     $innerW = $w - 2 * $marginX; $innerH = $h - 2 * $marginY
-    if ($innerW -le 0 -or $innerH -le 0) { # [Console]::Error.WriteLine("MULTI-OCCL: invalid inner size"); return $false }
+    if ($innerW -le 0 -or $innerH -le 0) { return $false }  # [Console]::Error.WriteLine("MULTI-OCCL: invalid inner size")
 
     $samplePoints = @()
     # Interior grid: 5 columns x 4 rows = 20 points
@@ -182,7 +182,7 @@ function IsWindowFullyOccluded($hwnd, $procIds) {
     for ($p = 0; $p -lt $samplePoints.Count; $p += 2) {
         $x = $samplePoints[$p]; $y = $samplePoints[$p+1]
         $topHwnd = [Win32]::WindowFromPoint($x, $y)
-        if ($topHwnd -eq [IntPtr]::Zero) { # [Console]::Error.WriteLine("  [$x,$y] → hwnd=0 (skip)"); continue }
+        if ($topHwnd -eq [IntPtr]::Zero) { continue }  # [Console]::Error.WriteLine("  [$x,$y] → hwnd=0 (skip)")
         $rootHwnd = [Win32]::GetAncestor($topHwnd, 2)  # GA_ROOT = 2
 
         # Check if this point shows Claude itself → visible at this point
@@ -230,8 +230,8 @@ function IsWindowFullyOccluded($hwnd, $procIds) {
         $aboveCount++
     }
     # [Console]::Error.WriteLine("  ==> above=$aboveCount below=$belowCount claudeVisible=$anyClaudeVisible")
-    if ($anyClaudeVisible) { # [Console]::Error.WriteLine("  ==> decision: NOT occluded (Claude visible at some point)"); return $false }
-    if ($belowCount -gt 0) { # [Console]::Error.WriteLine("  ==> decision: NOT occluded ($belowCount points below Claude)"); return $false }
+    if ($anyClaudeVisible) { return $false }  # [Console]::Error.WriteLine("  ==> decision: NOT occluded (Claude visible at some point)")
+    if ($belowCount -gt 0) { return $false }  # [Console]::Error.WriteLine("  ==> decision: NOT occluded ($belowCount points below Claude)")
     # [Console]::Error.WriteLine("  ==> decision: OCCLUDED (all $aboveCount points covered by windows above Claude)")
     return $true
 }
