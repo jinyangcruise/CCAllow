@@ -380,10 +380,10 @@ ipcMain.handle('download-update', async (_e, url) => {
     await new Promise((resolve, reject) => {
         const u = new URL(url);
         https.get({ hostname: u.hostname, path: u.pathname, rejectUnauthorized: false }, (res) => {
-            const total = parseInt(res.headers['content-length'] || '0', 10);
-            let downloaded = 0;
-            res.on('data', (chunk) => { downloaded += chunk.length; file.write(chunk); });
-            res.on('end', () => { file.end(); resolve(); });
+            res.on('error', reject);
+            res.pipe(file);
+            file.on('finish', () => resolve());
+            file.on('error', reject);
         }).on('error', reject);
     });
     return { path: dest };
@@ -392,6 +392,7 @@ ipcMain.handle('download-update', async (_e, url) => {
 ipcMain.handle('install-update', () => {
     if (downloadPath && fs.existsSync(downloadPath)) {
         shell.openPath(downloadPath);
+        app.quit();
         return { success: true };
     }
     return { success: false, error: 'no downloaded file' };
