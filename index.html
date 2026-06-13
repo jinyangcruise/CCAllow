@@ -49,6 +49,30 @@ h1{font-size:20px;color:#1d1d1f}
 .sub-card .toggle-row{display:flex;align-items:center;justify-content:space-between;margin-top:10px}
 .sub-card .toggle-row span{font-size:12px;color:#86868b}
 .dark .sub-card .toggle-row span{color:#94a3b8}
+.target-list{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+.target-item{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#f5f5f7;border:1px solid #e5e5e7;border-radius:8px;padding:7px 8px;font-size:12px;color:#1d1d1f}
+.dark .target-item{background:#0f172a;border-color:#2d2d4a;color:#e0e0e0}
+.target-remove{background:transparent;border:1px solid #d1d1d6;color:#636366;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px;flex-shrink:0}
+.dark .target-remove{border-color:#444;color:#94a3b8}
+.target-remove:hover{border-color:#c41e1e;color:#c41e1e}
+.dark .target-remove:hover{border-color:#fca5a5;color:#fca5a5}
+.target-form{display:flex;gap:8px;margin-top:8px}
+.target-form input{flex:1;min-width:0;border:1px solid #d1d1d6;border-radius:8px;padding:7px 8px;font-size:12px;background:#fff;color:#1d1d1f;outline:none}
+.dark .target-form input{background:#0f172a;border-color:#2d2d4a;color:#e0e0e0}
+.target-form input:focus{border-color:#4f46e5}
+.target-form button{border:none;background:#4f46e5;color:#fff;border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;flex-shrink:0}
+.target-form .secondary-btn{background:transparent;border:1px solid #d1d1d6;color:#636366}
+.dark .target-form .secondary-btn{border-color:#444;color:#94a3b8}
+.target-form .secondary-btn:hover{border-color:#4f46e5;color:#4f46e5}
+.target-empty{font-size:12px;color:#86868b;background:#f5f5f7;border:1px dashed #d1d1d6;border-radius:8px;padding:8px}
+.dark .target-empty{color:#94a3b8;background:#0f172a;border-color:#2d2d4a}
+.button-scan{display:none;margin-top:8px;border:1px solid #e5e5e7;border-radius:8px;background:#f5f5f7;padding:8px;max-height:120px;overflow-y:auto}
+.dark .button-scan{background:#0f172a;border-color:#2d2d4a}
+.button-scan.visible{display:block}
+.button-scan-item{display:block;width:100%;text-align:left;background:transparent;border:none;color:#1d1d1f;padding:5px 6px;border-radius:5px;cursor:pointer;font-size:12px}
+.dark .button-scan-item{color:#e0e0e0}
+.button-scan-item:hover{background:#e8e8ed}
+.dark .button-scan-item:hover{background:#16213e}
 
 .status{margin-top:4px;padding:8px 12px;border-radius:8px;font-size:13px;transition:background .15s,color .15s}
 .status.idle{background:#e8e8ed;color:#636366}
@@ -106,6 +130,24 @@ h1{font-size:20px;color:#1d1d1f}
             <span class="slider"></span>
         </label>
     </div>
+</div>
+
+<div class="card">
+    <div class="card-row">
+        <div>
+            <div class="card-label" data-i18n="buttonTargets">检测按钮文字</div>
+            <div class="card-desc" data-i18n="buttonTargetsDesc">按钮文字完全等于这些内容时会被自动点击</div>
+        </div>
+    </div>
+    <div class="target-list" id="targetList"></div>
+    <form class="target-form" id="targetForm">
+        <input type="text" id="targetInput" data-i18n-placeholder="buttonTargetPlaceholder">
+        <button type="submit" data-i18n="addButtonTarget">添加</button>
+        <button type="button" id="listButtons" class="secondary-btn" data-i18n="listCurrentButtons">列出当前按钮</button>
+        <button type="button" id="resetTargets" class="secondary-btn" data-i18n="resetButtonTargets">恢复默认</button>
+    </form>
+    <div class="button-scan" id="buttonScan"></div>
+    <div class="card-desc" style="margin-top:8px" data-i18n="buttonTargetsHint">检测使用完整匹配，大小写不同会视为不同文字。</div>
 </div>
 
 <div class="card">
@@ -202,6 +244,13 @@ var silentStartEl = document.getElementById('silentStart');
 var checkUpdatesEl = document.getElementById('checkUpdates');
 var statusEl = document.getElementById('status');
 var logEl = document.getElementById('log');
+var targetList = document.getElementById('targetList');
+var targetForm = document.getElementById('targetForm');
+var targetInput = document.getElementById('targetInput');
+var listButtons = document.getElementById('listButtons');
+var resetTargets = document.getElementById('resetTargets');
+var buttonScan = document.getElementById('buttonScan');
+var buttonTargets = [];
 
 function t(key) {
     return (locales[currentLang] && locales[currentLang][key]) || locales['zh'][key] || key;
@@ -212,9 +261,14 @@ function applyLang() {
         var key = el.getAttribute('data-i18n');
         el.textContent = t(key);
     });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) {
+        var key = el.getAttribute('data-i18n-placeholder');
+        el.setAttribute('placeholder', t(key));
+    });
     document.querySelectorAll('.lang-btn').forEach(function(b) {
         b.classList.toggle('active', (b.id === 'langZh' && currentLang === 'zh') || (b.id === 'langEn' && currentLang === 'en'));
     });
+    renderButtonTargets();
 }
 
 function setStatus(msg, type) {
@@ -230,6 +284,58 @@ function log(msg) {
 
 function formatInterval(ms) {
     return ms >= 1000 ? (ms / 1000).toFixed(1) + 's' : ms + 'ms';
+}
+
+function renderButtonTargets() {
+    targetList.textContent = '';
+    if (!buttonTargets.length) {
+        var empty = document.createElement('div');
+        empty.className = 'target-empty';
+        empty.textContent = t('buttonTargetsEmpty');
+        targetList.appendChild(empty);
+        return;
+    }
+    buttonTargets.forEach(function(text, index) {
+        var item = document.createElement('div');
+        item.className = 'target-item';
+        var label = document.createElement('span');
+        label.textContent = text;
+        var remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'target-remove';
+        remove.dataset.index = String(index);
+        remove.textContent = t('deleteButtonTarget');
+        item.appendChild(label);
+        item.appendChild(remove);
+        targetList.appendChild(item);
+    });
+}
+
+function renderButtonScan(buttons, message) {
+    buttonScan.textContent = '';
+    buttonScan.classList.add('visible');
+    if (message) {
+        var info = document.createElement('div');
+        info.className = 'target-empty';
+        info.textContent = message;
+        buttonScan.appendChild(info);
+        return;
+    }
+    buttons.forEach(function(text) {
+        var item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'button-scan-item';
+        item.textContent = text;
+        item.dataset.text = text;
+        buttonScan.appendChild(item);
+    });
+}
+
+async function saveButtonTargets() {
+    var result = await window.ccallow.setButtonTargets(buttonTargets);
+    buttonTargets = result.targets || [];
+    renderButtonTargets();
+    log(t('buttonTargetsSaved'));
 }
 
 // --- Language ---
@@ -274,6 +380,11 @@ window.ccallow.getStatus().then(function(state) {
     if (state.enabled) setStatus(t('statusActive'), 'active');
 });
 
+window.ccallow.getButtonTargets().then(function(state) {
+    buttonTargets = state.targets || [];
+    renderButtonTargets();
+});
+
 window.ccallow.getMinimizedPolling().then(function(state) {
     minPoll.checked = state.enabled;
     intervalCard.classList.toggle('visible', state.enabled);
@@ -310,6 +421,62 @@ toggle.addEventListener('change', async function() {
     toggle.checked = result.enabled;
     if (result.enabled) { setStatus(t('statusActive'), 'active'); log(t('monitoringStarted')); }
     else { setStatus(t('statusStopped'), 'idle'); log(t('monitoringStopped')); }
+});
+
+targetForm.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var text = targetInput.value.trim();
+    if (!text) return;
+    var exists = buttonTargets.some(function(item) { return item === text; });
+    if (exists) {
+        log(t('buttonTargetExists'));
+        return;
+    }
+    buttonTargets.push(text);
+    targetInput.value = '';
+    await saveButtonTargets();
+});
+
+targetList.addEventListener('click', async function(e) {
+    if (!e.target.classList.contains('target-remove')) return;
+    var index = parseInt(e.target.dataset.index, 10);
+    if (Number.isNaN(index)) return;
+    buttonTargets.splice(index, 1);
+    await saveButtonTargets();
+});
+
+resetTargets.addEventListener('click', async function() {
+    var result = await window.ccallow.resetButtonTargets();
+    buttonTargets = result.targets || [];
+    renderButtonTargets();
+    log(t('buttonTargetsReset'));
+});
+
+listButtons.addEventListener('click', async function() {
+    listButtons.disabled = true;
+    listButtons.textContent = t('listingButtons');
+    try {
+        var result = await window.ccallow.listClaudeButtons();
+        if (!result.ok) {
+            renderButtonScan([], result.error === 'claude_not_found' ? t('claudeNotFound') : t('buttonListFailed'));
+            log(t('buttonListFailed'));
+        } else if (!result.buttons.length) {
+            renderButtonScan([], t('noButtonsFound'));
+            log(t('noButtonsFound'));
+        } else {
+            renderButtonScan(result.buttons);
+            log(t('buttonsFound') + ': ' + result.buttons.length);
+        }
+    } finally {
+        listButtons.disabled = false;
+        listButtons.textContent = t('listCurrentButtons');
+    }
+});
+
+buttonScan.addEventListener('click', function(e) {
+    if (!e.target.classList.contains('button-scan-item')) return;
+    targetInput.value = e.target.dataset.text || e.target.textContent;
+    targetInput.focus();
 });
 
 // --- Minimized polling ---

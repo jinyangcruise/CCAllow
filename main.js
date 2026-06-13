@@ -8,6 +8,7 @@ const GH_REPO = 'jinyangcruise/CCAllow';
 const assetsDir = path.join(__dirname, 'assets');
 const iconPath = path.join(assetsDir, 'icon.png');
 const trayIconPath = path.join(assetsDir, 'tray-icon.png');
+const DEFAULT_BUTTON_TARGETS = ["Allow once Ctrl+Enter"];
 
 let mainWindow;
 let tray;
@@ -59,6 +60,24 @@ function createTray() {
     tray.on('click', () => { mainWindow.isVisible() ? mainWindow.focus() : (mainWindow.show(), mainWindow.focus()); });
 }
 
+function normalizeButtonTargets(targets) {
+    const source = Array.isArray(targets) ? targets : DEFAULT_BUTTON_TARGETS;
+    const seen = new Set();
+    return source
+        .map((t) => String(t || '').trim())
+        .filter((t) => {
+            if (!t || seen.has(t)) return false;
+            seen.add(t);
+            return true;
+        });
+}
+
+function getButtonTargets() {
+    const cfg = getConfig();
+    if (Array.isArray(cfg.buttonTargets)) return normalizeButtonTargets(cfg.buttonTargets);
+    return DEFAULT_BUTTON_TARGETS.slice();
+}
+
 const trayLabels = {
     zh: { show: '显示 CC Allow', start: '开始监控', stop: '停止监控', bringClaude: '找回Claude窗口', exit: '退出' },
     en: { show: 'Show CC Allow', start: 'Start Monitoring', stop: 'Stop Monitoring', bringClaude: 'Bring Claude to Front', exit: 'Exit' }
@@ -105,6 +124,46 @@ $y = [Math]::Max(0, [int](($sh - 800) / 2))
     ps.unref();
 }
 
+function listClaudeButtons() {
+    return new Promise((resolve) => {
+        const script = `
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+$p = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match 'claude' -and $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+if (-not $p) { Write-Output '{"ok":false,"error":"claude_not_found","buttons":[]}'; exit }
+try {
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
+    $cond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElementIdentifiers]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Button)
+    $items = @()
+    $buttons = $root.FindAll([System.Windows.Automation.TreeScope]::Subtree, $cond)
+    for ($i = 0; $i -lt $buttons.Count; $i++) {
+        $name = $buttons[$i].Current.Name.Trim()
+        if ($name -and -not ($items -ccontains $name)) { $items += $name }
+    }
+    [pscustomobject]@{ ok = $true; buttons = $items } | ConvertTo-Json -Compress
+} catch {
+    [pscustomobject]@{ ok = $false; error = $_.Exception.Message; buttons = @() } | ConvertTo-Json -Compress
+}
+`;
+        const ps = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], { stdio: ['ignore', 'pipe', 'pipe'] });
+        let stdout = '';
+        let stderr = '';
+        ps.stdout.on('data', (d) => { stdout += d.toString(); });
+        ps.stderr.on('data', (d) => { stderr += d.toString(); });
+        ps.on('error', (err) => resolve({ ok: false, error: err.message, buttons: [] }));
+        ps.on('exit', () => {
+            try {
+                const data = JSON.parse(stdout.trim());
+                resolve({ ok: data.ok === true, error: data.error || '', buttons: Array.isArray(data.buttons) ? data.buttons : [] });
+            } catch {
+                resolve({ ok: false, error: stderr.trim() || 'parse_failed', buttons: [] });
+            }
+        });
+    });
+}
+
 function startMonitor() {
     if (monitorProcess) return;
     const psPath = path.join(__dirname, 'monitor.ps1');
@@ -132,6 +191,7 @@ function startMonitor() {
     const interval = cfg.minimizedInterval || 2500;
     sendMonitorCmd(`interval:${interval}`);
     sendMonitorCmd(cfg.minimizeAfterAllow === true ? 'minimize-after-allow:on' : 'minimize-after-allow:off');
+    sendMonitorCmd(`targets:${JSON.stringify(getButtonTargets())}`);
 }
 
 function sendMonitorCmd(cmd) {
@@ -173,6 +233,24 @@ ipcMain.handle('toggle-monitor', () => {
 });
 
 ipcMain.handle('get-status', () => ({ enabled: monitorEnabled }));
+
+ipcMain.handle('get-button-targets', () => ({ targets: getButtonTargets() }));
+
+ipcMain.handle('set-button-targets', (_e, targets) => {
+    const normalized = normalizeButtonTargets(targets);
+    saveConfig({ buttonTargets: normalized });
+    sendMonitorCmd(`targets:${JSON.stringify(normalized)}`);
+    return { targets: normalized };
+});
+
+ipcMain.handle('reset-button-targets', () => {
+    const targets = DEFAULT_BUTTON_TARGETS.slice();
+    saveConfig({ buttonTargets: targets });
+    sendMonitorCmd(`targets:${JSON.stringify(targets)}`);
+    return { targets };
+});
+
+ipcMain.handle('list-claude-buttons', () => listClaudeButtons());
 
 ipcMain.handle('get-auto-start', () => {
     const cfg = getConfig();

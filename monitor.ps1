@@ -55,7 +55,8 @@ public struct WINDOWPLACEMENT {
 
 $SM_CXSCREEN = 0; $SM_CYSCREEN = 1
 
-$targets = @("Allow once", "Allow Once", "Allow for this time", "Allow for this")
+$defaultTargets = @("Allow once Ctrl+Enter")
+$targets = @($defaultTargets)
 $running = $true
 $peekInterval = 2500
 $minimizedPolling = $false
@@ -74,6 +75,20 @@ function HandleCommand($line) {
     if ($line -eq "polling:off") { $script:minimizedPolling = $false; return }
     if ($line -eq "minimize-after-allow:on") { $script:minimizeAfterAllow = $true; return }
     if ($line -eq "minimize-after-allow:off") { $script:minimizeAfterAllow = $false; return }
+    if ($line.StartsWith("targets:")) {
+        try {
+            $json = $line.Substring(8)
+            $items = $json | ConvertFrom-Json
+            $nextTargets = @()
+            foreach ($item in @($items)) {
+                $text = ([string]$item).Trim()
+                if ($text -and -not ($nextTargets -ccontains $text)) { $nextTargets += $text }
+            }
+            $script:targets = @($nextTargets)
+            Write-Output "  targets: $($script:targets -join ', ')"
+        } catch { Write-Output "  targets parse error: $_" }
+        return
+    }
 }
 
 function FindAllowButton($root) {
@@ -89,7 +104,7 @@ function FindAllowButton($root) {
             if (-not $btn.Current.IsEnabled) { continue }
             $name = $btn.Current.Name.Trim()
             foreach ($t in $targets) {
-                if ($name.StartsWith($t)) { return $btn }
+                if ($name -ceq $t) { return $btn }
             }
         }
     } catch { }

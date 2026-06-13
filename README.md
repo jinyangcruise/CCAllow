@@ -1,12 +1,14 @@
 # CC Allow
 
-通过 Windows UI Automation 自动点击 Claude Desktop 中的 "Allow" / "Allow once" 按钮。
+通过 Windows UI Automation 自动点击 Claude Desktop 中的 "Allow once Ctrl+Enter" 按钮。
 
 [English](README.en.md)
 
 ## 功能
 
 - **Auto Allow** — 检测到 Allow 按钮时自动点击，无需手动操作
+- **自定义按钮文字** — 可添加、删除或恢复默认的完整匹配按钮文字
+- **列出当前按钮** — 扫描当前 Claude 窗口中的按钮文字，方便直接配置
 - **最小化轮询** — Claude 最小化后定期唤醒检查，发现 Allow 后自动点击（可开关）
 - **InvokePattern 点击** — 优先使用 UIA InvokePattern 点击，不抢焦点、不打断打字
 - **窗口还原** — 点击 Allow 后自动恢复窗口位置（可设置 Allow 后自动最小化）
@@ -19,7 +21,7 @@
 
 ## 原理
 
-使用 PowerShell UIAutomation 库监控 Claude Desktop 窗口，检测到 "Allow once" / "Allow for this time" 按钮时自动触发点击。优先使用 UIA InvokePattern（无需激活窗口），失败则降级为激活窗口 + SendKeys Ctrl+Enter。
+使用 PowerShell UIAutomation 库监控 Claude Desktop 窗口，检测到默认的 "Allow once Ctrl+Enter" 按钮文字时自动触发点击。优先使用 UIA InvokePattern（无需激活窗口），失败则降级为激活窗口 + SendKeys Ctrl+Enter。
 
 所有操作在本地完成，不修改 Claude Desktop 任何文件或进程。
 
