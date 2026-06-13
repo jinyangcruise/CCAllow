@@ -24,6 +24,9 @@
       "assets",
       "package.json"
     ],
+    "asarUnpack": [
+      "monitor.ps1"
+    ],
     "win": {
       "target": [
         {

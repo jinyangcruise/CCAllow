@@ -166,8 +166,11 @@ try {
 
 function startMonitor() {
     if (monitorProcess) return;
-    const psPath = path.join(__dirname, 'monitor.ps1');
-    if (!fs.existsSync(psPath)) { return; }
+    let psPath = path.join(__dirname, 'monitor.ps1');
+    // spawn uses native fs which can't read from app.asar
+    const unpackedPath = path.join(__dirname, '..', 'app.asar.unpacked', 'monitor.ps1');
+    if (fs.existsSync(unpackedPath)) { psPath = unpackedPath; }
+    else if (!fs.existsSync(psPath)) { return; }
 
     const proc = spawn('powershell', [
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', psPath,
